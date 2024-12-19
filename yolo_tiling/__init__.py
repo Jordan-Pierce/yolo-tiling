@@ -24,6 +24,17 @@ class YoloTiler:
         self.ratio = ratio
         self.annotation_type = annotation_type
 
+    def check_yolo_format(self, folder):
+        required_subfolders = ['train', 'val', 'test']
+        for subfolder in required_subfolders:
+            subfolder_path = os.path.join(folder, subfolder)
+            if not os.path.exists(subfolder_path):
+                raise Exception(f"Folder {subfolder_path} does not exist")
+            if not os.path.exists(os.path.join(subfolder_path, 'images')):
+                raise Exception(f"Folder {os.path.join(subfolder_path, 'images')} does not exist")
+            if not os.path.exists(os.path.join(subfolder_path, 'labels')):
+                raise Exception(f"Folder {os.path.join(subfolder_path, 'labels')} does not exist")
+
     def tiler(self, imnames, newpath, falsepath, slice_size, ext):
         for imname in imnames:
             im = Image.open(imname)
@@ -158,6 +169,9 @@ class YoloTiler:
                 f.write("%s\n" % item)
 
     def run(self):
+        self.check_yolo_format(self.source)
+        self.check_yolo_format(self.target)
+
         imnames = glob.glob(f'{self.source}/*{self.ext}')
         labnames = glob.glob(f'{self.source}/*.txt')
 
