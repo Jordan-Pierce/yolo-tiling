@@ -9,13 +9,14 @@ import random
 from shutil import copyfile
 
 class YoloTiler:
-    def __init__(self, source, target, ext, falsefolder, size, ratio):
+    def __init__(self, source, target, ext, falsefolder, size, ratio, annotation_type="object_detection"):
         self.source = source
         self.target = target
         self.ext = ext
         self.falsefolder = falsefolder
         self.size = size
         self.ratio = ratio
+        self.annotation_type = annotation_type
 
     def tiler(self, imnames, newpath, falsepath, slice_size, ext):
         for imname in imnames:
@@ -32,12 +33,17 @@ class YoloTiler:
             boxes = []
 
             for row in labels.iterrows():
-                x1 = row[1]['x1'] - row[1]['w']/2
-                y1 = (height - row[1]['y1']) - row[1]['h']/2
-                x2 = row[1]['x1'] + row[1]['w']/2
-                y2 = (height - row[1]['y1']) + row[1]['h']/2
+                if self.annotation_type == "object_detection":
+                    x1 = row[1]['x1'] - row[1]['w']/2
+                    y1 = (height - row[1]['y1']) - row[1]['h']/2
+                    x2 = row[1]['x1'] + row[1]['w']/2
+                    y2 = (height - row[1]['y1']) + row[1]['h']/2
 
-                boxes.append((int(row[1]['class']), Polygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])))
+                    boxes.append((int(row[1]['class']), Polygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])))
+                elif self.annotation_type == "instance_segmentation":
+                    points = row[1]['x1'].split(';')
+                    polygon_points = [(float(point.split(',')[0]) * width, (height - float(point.split(',')[1]) * height)) for point in points]
+                    boxes.append((int(row[1]['class']), Polygon(polygon_points)))
 
             counter = 0
             print('Image:', imname)
@@ -158,8 +164,9 @@ if __name__ == "__main__":
     parser.add_argument("-falsefolder", default=None, help = "Folder for tiles without bounding boxes")
     parser.add_argument("-size", type=int, default=416, help = "Size of a tile. Dafault: 416")
     parser.add_argument("-ratio", type=float, default=0.8, help = "Train/test split ratio. Dafault: 0.8")
+    parser.add_argument("-annotation_type", default="object_detection", help = "Type of annotation: object_detection or instance_segmentation")
 
     args = parser.parse_args()
 
-    yolo_tiler = YoloTiler(args.source, args.target, args.ext, args.falsefolder, args.size, args.ratio)
+    yolo_tiler = YoloTiler(args.source, args.target, args.ext, args.falsefolder, args.size, args.ratio, args.annotation_type)
     yolo_tiler.run()
