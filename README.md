@@ -16,6 +16,10 @@ pip install yolo-tiling
 
 `python3 -m yolo_tiling -source ./yolosample/ts/ -target ./yolosliced/ts/ -ext .JPG -size 512`
 
+To run the tiling process on each of the `train`, `val`, and `test` subfolders, use the following command:
+
+`python3 -m yolo_tiling -source ./yolosample/ts/ -target ./yolosliced/ts/ -ext .JPG -size 512 -subfolders train val test`
+
 ## Arguments
 
 - **-source**        Source folder with images and labels needed to be tiled. Default: ./yolosample/ts/
@@ -24,6 +28,7 @@ pip install yolo-tiling
 - **-falsefolder**   Folder for tiles without bounding boxes
 - **-size**          Size of a tile. Default: 416
 - **-ratio**         Train/test split ratio. Dafault: 0.8
+- **-subfolders**    Subfolders to process. Default: train val test
 
 ## Instance Segmentation Usage
 
@@ -56,3 +61,5 @@ yolo_tiler.run()
 ## Note
 
 The source and target folders must be YOLO formatted with `train`, `val`, `test` subfolders, each containing `images/` and `labels/` subfolders.
+
+The tiling process now runs on each of the `train`, `val`, and `test` subfolders.
