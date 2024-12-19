@@ -4,9 +4,17 @@
 
 This script can cut images and corresponding labels from YOLO dataset into tiles of specified size and create a new datased based on these tiles. More details you can find in the <a href="https://towardsdatascience.com/tile-slice-yolo-dataset-for-small-objects-detection-a75bf26f7fa2">article</a>.
 
+## Installation
+
+To install the package, use pip:
+
+```bash
+pip install yolo-tiling
+```
+
 ## Usage 
 
-`python3 tile_yolo.py -source ./yolosample/ts/ -target ./yolosliced/ts/ -ext .JPG -size 512`
+`python3 -m yolo_tiling -source ./yolosample/ts/ -target ./yolosliced/ts/ -ext .JPG -size 512`
 
 ## Arguments
 
@@ -22,7 +30,7 @@ This script can cut images and corresponding labels from YOLO dataset into tiles
 To use the script as a class, you can create an instance of the `YoloTiler` class and call its `run` method:
 
 ```python
-from tile_yolo import YoloTiler
+from yolo_tiling import YoloTiler
 
 yolo_tiler = YoloTiler(source="./yolosample/ts/", target="./yolosliced/ts/", ext=".JPG", falsefolder=None, size=512, ratio=0.8)
 yolo_tiler.run()
