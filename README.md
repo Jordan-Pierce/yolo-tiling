@@ -27,8 +27,10 @@ To run the tiling process on each of the `train`, `val`, and `test` subfolders, 
 - **-ext**           Image extension in a dataset. Default: .JPG
 - **-falsefolder**   Folder for tiles without bounding boxes
 - **-size**          Size of a tile. Default: 416
-- **-ratio**         Train/test split ratio. Dafault: 0.8
+- **-ratio**         Train, val, and test split ratios. Default: 0.7 0.2 0.1
 - **-subfolders**    Subfolders to process. Default: train val test
+
+Note: The sum of the train, val, and test ratios must be 1.
 
 ## Instance Segmentation Usage
 
@@ -43,7 +45,7 @@ To use the script as a class, you can create an instance of the `YoloTiler` clas
 ```python
 from yolo_tiling import YoloTiler
 
-yolo_tiler = YoloTiler(source="./yolosample/ts/", target="./yolosliced/ts/", ext=".JPG", falsefolder=None, size=512, ratio=0.8)
+yolo_tiler = YoloTiler(source="./yolosample/ts/", target="./yolosliced/ts/", ext=".JPG", falsefolder=None, size=512, train_ratio=0.7, val_ratio=0.2, test_ratio=0.1)
 yolo_tiler.run()
 ```
 
@@ -54,7 +56,7 @@ To use the script as a class for instance segmentation, you can create an instan
 ```python
 from yolo_tiling import YoloTiler
 
-yolo_tiler = YoloTiler(source="./yolosample/ts/", target="./yolosliced/ts/", ext=".JPG", falsefolder=None, size=512, ratio=0.8, annotation_type="instance_segmentation")
+yolo_tiler = YoloTiler(source="./yolosample/ts/", target="./yolosliced/ts/", ext=".JPG", falsefolder=None, size=512, train_ratio=0.7, val_ratio=0.2, test_ratio=0.1, annotation_type="instance_segmentation")
 yolo_tiler.run()
 ```
 

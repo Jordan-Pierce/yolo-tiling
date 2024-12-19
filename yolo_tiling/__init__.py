@@ -15,14 +15,18 @@ from shutil import copyfile
 
 
 class YoloTiler:
-    def __init__(self, source, target, ext, falsefolder, size, ratio, annotation_type="object_detection"):
+    def __init__(self, source, target, ext, falsefolder, size, train_ratio, val_ratio, test_ratio, annotation_type="object_detection"):
         self.source = source
         self.target = target
         self.ext = ext
         self.falsefolder = falsefolder
         self.size = size
-        self.ratio = ratio
+        self.train_ratio = train_ratio
+        self.val_ratio = val_ratio
+        self.test_ratio = test_ratio
         self.annotation_type = annotation_type
+
+        assert train_ratio + val_ratio + test_ratio == 1, "The sum of train_ratio, val_ratio, and test_ratio must be 1"
 
     def check_yolo_format(self, folder):
         required_subfolders = ['train', 'val', 'test']
@@ -145,23 +149,31 @@ class YoloTiler:
                         print('Slice without boxes saved')
                         imsaved = True
 
-    # The rest of the class methods (splitter, run) remain unchanged
-    def splitter(self, target, target_upfolder, ext, ratio):
+    def splitter(self, target, target_upfolder, ext, train_ratio, val_ratio, test_ratio):
         imnames = glob.glob(f'{target}/*{ext}')
         names = [name.split('/')[-1] for name in imnames]
 
         train = []
+        val = []
         test = []
         for name in names:
-            if random.random() > ratio:
-                test.append(os.path.join(target, name))
-            else:
+            rand_val = random.random()
+            if rand_val < train_ratio:
                 train.append(os.path.join(target, name))
+            elif rand_val < train_ratio + val_ratio:
+                val.append(os.path.join(target, name))
+            else:
+                test.append(os.path.join(target, name))
         print('train:', len(train))
+        print('val:', len(val))
         print('test:', len(test))
 
         with open(f'{target_upfolder}/train.txt', 'w') as f:
             for item in train:
+                f.write("%s\n" % item)
+
+        with open(f'{target_upfolder}/val.txt', 'w') as f:
+            for item in val:
                 f.write("%s\n" % item)
 
         with open(f'{target_upfolder}/test.txt', 'w') as f:
@@ -204,7 +216,7 @@ class YoloTiler:
                     raise Exception(f"Folder for tiles without boxes {falsefolder_subfolder_path} should be empty")
 
             self.tiler(imnames, target_subfolder_path, self.falsefolder, self.size, self.ext)
-            self.splitter(target_subfolder_path, target_upfolder, self.ext, self.ratio)
+            self.splitter(target_subfolder_path, target_upfolder, self.ext, self.train_ratio, self.val_ratio, self.test_ratio)
 
 
 # ----------------------------------------------------------------------------------------------------------------------------------------
@@ -220,10 +232,12 @@ if __name__ == "__main__":
     parser.add_argument("--ext", default=".JPG", help = "Image extension in a dataset. Default: .JPG")
     parser.add_argument("--falsefolder", default=None, help = "Folder for tiles without bounding boxes")
     parser.add_argument("--size", type=int, default=416, help = "Size of a tile. Dafault: 416")
-    parser.add_argument("--ratio", type=float, default=0.8, help = "Train/test split ratio. Dafault: 0.8")
+    parser.add_argument("--train_ratio", type=float, default=0.7, help = "Train split ratio. Default: 0.7")
+    parser.add_argument("--val_ratio", type=float, default=0.2, help = "Validation split ratio. Default: 0.2")
+    parser.add_argument("--test_ratio", type=float, default=0.1, help = "Test split ratio. Default: 0.1")
     parser.add_argument("--annotation_type", default="object_detection", help = "Type of annotation: object_detection or instance_segmentation")
 
     args = parser.parse_args()
 
-    yolo_tiler = YoloTiler(args.source, args.target, args.ext, args.falsefolder, args.size, args.ratio, args.annotation_type)
+    yolo_tiler = YoloTiler(args.source, args.target, args.ext, args.falsefolder, args.size, args.train_ratio, args.val_ratio, args.test_ratio, args.annotation_type)
     yolo_tiler.run()
