@@ -6,7 +6,7 @@ This script can cut images and corresponding labels from YOLO dataset into tiles
 
 ## Usage 
 
-`python3 tyle_yolo.py -source ./yolosample/ts/ -target ./yolosliced/ts/ -ext .JPG -size 512`
+`python3 tile_yolo.py -source ./yolosample/ts/ -target ./yolosliced/ts/ -ext .JPG -size 512`
 
 ## Arguments
 
@@ -17,4 +17,13 @@ This script can cut images and corresponding labels from YOLO dataset into tiles
 - **-size**          Size of a tile. Default: 416
 - **-ratio**         Train/test split ratio. Dafault: 0.8
 
+## Class-based Usage
 
+To use the script as a class, you can create an instance of the `YoloTiler` class and call its `run` method:
+
+```python
+from tile_yolo import YoloTiler
+
+yolo_tiler = YoloTiler(source="./yolosample/ts/", target="./yolosliced/ts/", ext=".JPG", falsefolder=None, size=512, ratio=0.8)
+yolo_tiler.run()
+```
