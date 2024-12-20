@@ -172,34 +172,39 @@ class YoloTiler:
         self.check_yolo_format(self.source)
         self.check_yolo_format(self.target)
 
-        imnames = glob.glob(f'{self.source}/*{self.ext}')
-        labnames = glob.glob(f'{self.source}/*.txt')
+        subfolders = ['train', 'val', 'test']
+        for subfolder in subfolders:
+            subfolder_path = os.path.join(self.source, subfolder)
+            imnames = glob.glob(f'{subfolder_path}/images/*{self.ext}')
+            labnames = glob.glob(f'{subfolder_path}/labels/*.txt')
 
-        if len(imnames) == 0:
-            raise Exception("Source folder should contain some images")
-        elif len(imnames) != len(labnames):
-            raise Exception("Dataset should contain equal number of images and txt files with labels")
+            if len(imnames) == 0:
+                raise Exception(f"Source folder {subfolder_path} should contain some images")
+            elif len(imnames) != len(labnames):
+                raise Exception(f"Dataset in {subfolder_path} should contain equal number of images and txt files with labels")
 
-        if not os.path.exists(self.target):
-            os.makedirs(self.target)
-        elif len(os.listdir(self.target)) > 0:
-            raise Exception("Target folder should be empty")
+            target_subfolder_path = os.path.join(self.target, subfolder)
+            if not os.path.exists(target_subfolder_path):
+                os.makedirs(target_subfolder_path)
+            elif len(os.listdir(target_subfolder_path)) > 0:
+                raise Exception(f"Target subfolder {target_subfolder_path} should be empty")
 
-        upfolder = os.path.join(self.source, '..' )
-        target_upfolder = os.path.join(self.target, '..' )
-        if not os.path.exists(os.path.join(upfolder, 'classes.names')):
-            print('classes.names not found. It should be located one level higher than images')
-        else:
-            copyfile(os.path.join(upfolder, 'classes.names'), os.path.join(target_upfolder, 'classes.names'))
+            upfolder = os.path.join(subfolder_path, '..' )
+            target_upfolder = os.path.join(target_subfolder_path, '..' )
+            if not os.path.exists(os.path.join(upfolder, 'classes.names')):
+                print('classes.names not found. It should be located one level higher than images')
+            else:
+                copyfile(os.path.join(upfolder, 'classes.names'), os.path.join(target_upfolder, 'classes.names'))
 
-        if self.falsefolder:
-            if not os.path.exists(self.falsefolder):
-                os.makedirs(self.falsefolder)
-            elif len(os.listdir(self.falsefolder)) > 0:
-                raise Exception("Folder for tiles without boxes should be empty")
+            if self.falsefolder:
+                falsefolder_subfolder_path = os.path.join(self.falsefolder, subfolder)
+                if not os.path.exists(falsefolder_subfolder_path):
+                    os.makedirs(falsefolder_subfolder_path)
+                elif len(os.listdir(falsefolder_subfolder_path)) > 0:
+                    raise Exception(f"Folder for tiles without boxes {falsefolder_subfolder_path} should be empty")
 
-        self.tiler(imnames, self.target, self.falsefolder, self.size, self.ext)
-        self.splitter(self.target, target_upfolder, self.ext, self.ratio)
+            self.tiler(imnames, target_subfolder_path, self.falsefolder, self.size, self.ext)
+            self.splitter(target_subfolder_path, target_upfolder, self.ext, self.ratio)
 
 
 # ----------------------------------------------------------------------------------------------------------------------------------------
