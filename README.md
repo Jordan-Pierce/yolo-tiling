@@ -52,3 +52,7 @@ from yolo_tiling import YoloTiler
 yolo_tiler = YoloTiler(source="./yolosample/ts/", target="./yolosliced/ts/", ext=".JPG", falsefolder=None, size=512, ratio=0.8, annotation_type="instance_segmentation")
 yolo_tiler.run()
 ```
+
+## Note
+
+The source and target folders must be YOLO formatted with `train`, `val`, `test` subfolders, each containing `images/` and `labels/` subfolders.
