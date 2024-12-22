@@ -53,11 +53,9 @@ class YoloTiler:
             source: Source directory containing YOLO dataset
             target: Target directory for sliced dataset
             config: TileConfig object containing tiling parameters
-            false_folder: Optional directory for storing tiles without annotations
         """
         self.source = Path(source)
         self.target = Path(target)
-        self.false_folder = Path(self.target / "false_folder")
         self.config = config
         self.logger = self._setup_logger()
         
@@ -80,9 +78,6 @@ class YoloTiler:
         for subfolder in self.subfolders:
             (target / subfolder / "images").mkdir(parents=True, exist_ok=True)
             (target / subfolder / "labels").mkdir(parents=True, exist_ok=True)
-            
-        # Create false folder if needed
-        self.false_folder.mkdir(parents=True, exist_ok=True)
         
     def _validate_yolo_structure(self, folder: Path) -> None:
         """
@@ -207,35 +202,33 @@ class YoloTiler:
         image_array = np.array(image, dtype=np.uint8)
         width, height = image.size
 
-        # Read labels based on annotation type
-        if self.config.annotation_type == "object_detection":
-            columns = ['class', 'x1', 'y1', 'w', 'h']
-        else:
-            columns = ['class', 'points']
-
-        # Read the label file
-        labels = pd.read_csv(label_path, sep=' ', names=columns)
-
         # Process annotations
         boxes = []
-        for _, row in labels.iterrows():
-            if self.config.annotation_type == "object_detection":
-                # Convert YOLO format to pixel coordinates
-                x_center, y_center = row['x1'] * width, row['y1'] * height
-                box_w, box_h = row['w'] * width, row['h'] * height
-                x1 = x_center - box_w / 2
-                y1 = y_center - box_h / 2
-                x2 = x_center + box_w / 2
-                y2 = y_center + box_h / 2
-                boxes.append((int(row['class']), Polygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])))
-            else:
-                # Process instance segmentation points
-                points = []
-                for point in row['points'].split(';'):
-                    for x, y in [point.split(',')]:
-                        points.append((float(x) * width, float(y) * height))
-                        
-                boxes.append((int(row['class']), Polygon(points)))
+        with open(label_path) as f:
+            for line in f:
+                parts = line.strip().split()
+                class_id = int(parts[0])
+                
+                if self.config.annotation_type == "object_detection":
+                    # Parse fixed format: class x y w h
+                    x_center = float(parts[1]) * width
+                    y_center = float(parts[2]) * height
+                    box_w = float(parts[3]) * width
+                    box_h = float(parts[4]) * height
+                    
+                    x1 = x_center - box_w / 2
+                    y1 = y_center - box_h / 2
+                    x2 = x_center + box_w / 2
+                    y2 = y_center + box_h / 2
+                    boxes.append((class_id, Polygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])))
+                else:
+                    # Parse variable length format: class x1 y1 x2 y2 ...
+                    points = []
+                    for i in range(1, len(parts), 2):
+                        x = float(parts[i]) * width
+                        y = float(parts[i + 1]) * height
+                        points.append((x, y))
+                    boxes.append((class_id, Polygon(points)))
 
         # Process each tile
         for tile_idx, (x1, y1, x2, y2) in enumerate(self._calculate_tile_positions((width, height))):
@@ -254,7 +247,7 @@ class YoloTiler:
                         # Handle instance segmentation
                         coords = self._process_intersection(intersection)
                         normalized = self._normalize_coordinates(coords, (x1, y1, x2, y2))
-                        tile_labels.append([box_class, ";".join(normalized)])
+                        tile_labels.append([box_class, " ".join(normalized)])
                     else:
                         # Handle object detection
                         bbox = intersection.envelope
@@ -268,10 +261,7 @@ class YoloTiler:
 
             # Save tile and annotations
             tile_suffix = f'_tile_{tile_idx}{self.config.ext}'
-            if has_annotations:
-                self._save_tile(tile_data, image_path, tile_suffix, tile_labels, folder, False)
-            elif self.false_folder:
-                self._save_tile(tile_data, image_path, tile_suffix, None, folder, True)
+            self._save_tile(tile_data, image_path, tile_suffix, tile_labels, folder)
                 
     def _process_tile(self, 
                       image: np.ndarray, 
@@ -310,8 +300,8 @@ class YoloTiler:
                 intersection = tile_polygon.intersection(box_polygon)
                 if self.config.annotation_type == "instance_segmentation":
                     coords = self._process_intersection(intersection)
-                    normalized = self._normalize_coordinates(coords, (x1, y1, x2, y2), tile_size)
-                    tile_labels.append([box_class, ";".join(normalized)])
+                    normalized = self._normalize_coordinates(coords, (x1, y1, x2, y2))
+                    tile_labels.append([box_class, " ".join(normalized)])
                 else:
                     bbox = intersection.envelope
                     center = bbox.centroid
@@ -322,21 +312,16 @@ class YoloTiler:
                     new_y = (y1 - center.coords.xy[1][0]) / tile_size
                     tile_labels.append([box_class, new_x, new_y, new_width, new_height])
 
-        if tile_labels:
-            output_path = self.target / image_path.with_suffix('.txt').name.replace(self.config.ext, f'_{i}_{j}.txt')
-            self._save_labels(tile_labels, output_path, self.config.annotation_type == "instance_segmentation")
-            
-        elif not tile_saved and self.false_folder:
-            tile_image = image[i * tile_size: (i + 1) * tile_size, j * tile_size: (j + 1) * tile_size]
-            self._save_tile_image(tile_image, image_path, i, j, is_false=True)
+        # Save tile labels
+        output_path = self.target / image_path.with_suffix('.txt').name.replace(self.config.ext, f'_{i}_{j}.txt')
+        self._save_labels(tile_labels, output_path, self.config.annotation_type == "instance_segmentation")
 
     def _save_tile(self,
                    tile_data: np.ndarray, 
                    original_path: Path, 
                    suffix: str, 
                    labels: Optional[List],
-                   folder: str,
-                   is_false: bool = False) -> None:
+                   folder: str) -> None:
         """
         Save a tile image and its labels.
         
@@ -346,10 +331,9 @@ class YoloTiler:
             suffix: Suffix for the tile filename
             labels: List of labels for the tile
             folder: Subfolder name (train, valid, test) for image and label files
-            is_false: Whether to save to false folder
         """
         # Set the save directory
-        save_dir = self.false_folder if is_false else self.target / folder
+        save_dir = self.target / folder
 
         # Save the image in the appropriate directory
         image_path = save_dir / "images" / original_path.name.replace(self.config.ext, suffix)
@@ -357,22 +341,18 @@ class YoloTiler:
         
         if labels:
             # Save the labels in the appropriate directory
-            label_path = save_dir / "labels" / original_path.name.replace(self.config.ext, suffix).with_suffix('.txt')
+            label_path = save_dir / "labels" / original_path.name.replace(self.config.ext, suffix)
+            label_path = label_path.with_suffix('.txt')
             is_segmentation = self.config.annotation_type == "instance_segmentation"
             if is_segmentation:
                 with open(label_path, 'w') as f:
                     for label_class, points in labels:
-                        f.write(f"{label_class} {points}\n")
+                        f.write(f"{label_class} {points.replace(',', ' ')}\n")
             else:
                 df = pd.DataFrame(labels, columns=['class', 'x1', 'y1', 'w', 'h'])
                 df.to_csv(label_path, sep=' ', index=False, header=False, float_format='%.6f')
 
-    def _save_tile_image(self, 
-                         tile_array: np.ndarray, 
-                         original_path: Path, 
-                         i: int, 
-                         j: int, 
-                         is_false: bool = False) -> None:
+    def _save_tile_image(self, tile_array: np.ndarray, original_path: Path, i: int, j: int) -> None:
         """
         Save a tile image to the appropriate directory.
 
@@ -380,34 +360,12 @@ class YoloTiler:
             tile_array: Numpy array of tile image
             original_path: Path to original image
             i, j: Tile indices
-            is_false: Whether to save to false folder
         """
-        if is_false and not self.false_folder:
-            return
-        
-        if is_false:
-            save_path = self.false_folder / original_path.name.replace(self.config.ext, f'_{i}_{j}{self.config.ext}')
-        else:
-            save_path = self.target / original_path.name.replace(self.config.ext, f'_{i}_{j}{self.config.ext}')
-        
+        # Set the save directory
+        save_path = self.target / original_path.name.replace(self.config.ext, f'_{i}_{j}{self.config.ext}')
+        # Save the image
         Image.fromarray(tile_array).save(save_path)
         self.logger.info(f"Saved tile to {save_path}")
-
-    def split_dataset(self) -> None:
-        """Split the dataset into train and test sets"""
-        image_paths = list(self.target.glob(f'*{self.config.ext}'))
-        np.random.shuffle(image_paths)
-        split_idx = int(len(image_paths) * self.config.ratio)
-
-        train_paths = image_paths[:split_idx]
-        test_paths = image_paths[split_idx:]
-
-        self.logger.info(f'Train set: {len(train_paths)} images')
-        self.logger.info(f'Test set: {len(test_paths)} images')
-
-        for filename, paths in [('train.txt', train_paths), ('test.txt', test_paths)]:
-            with open(self.target.parent / filename, 'w') as f:
-                f.write('\n'.join(str(p) for p in paths))
 
     def run(self) -> None:
         """Run the complete tiling process"""
@@ -427,9 +385,11 @@ class YoloTiler:
 
                 # Check for missing files
                 if not image_paths:
-                    raise ValueError("No images found in source directory")
+                    self.logger.warning(f"No images found in {subfolder} directory, skipping")
+                    continue
                 if len(image_paths) != len(label_paths):
-                    raise ValueError("Unequal number of images and label files")
+                    self.logger.error(f"Number of images and labels do not match in {subfolder} directory, skipping")
+                    continue
 
                 # Process each image
                 for image_path, label_path in list(zip(image_paths, label_paths)):
@@ -437,20 +397,12 @@ class YoloTiler:
                     self.logger.info(f'Processing {image_path}')
                     self.tile_image(image_path, label_path, subfolder)
 
-            # Split dataset
-            self.split_dataset()
             self.logger.info('Tiling process completed successfully')
             
-            # Copy classes from data.yaml if it exists
+            # Copy data.yaml
             data_yaml = self.source / 'data.yaml'
             if data_yaml.exists():
-                with open(data_yaml, 'r') as f:
-                    data = yaml.safe_load(f)
-                if 'names' in data:
-                    with open(self.target.parent / 'classes.names', 'w') as f:
-                        f.write('\n'.join(data['names']))
-                else:
-                    self.logger.warning('No classes found in data.yaml')
+                copyfile(data_yaml, self.target / 'data.yaml')
             else:
                 self.logger.warning('data.yaml not found in source directory')
 
