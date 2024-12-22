@@ -1,4 +1,6 @@
 import os
+import unittest
+from unittest.mock import patch, MagicMock
 from yolo_tiler import YoloTiler, TileConfig
 
 src = "C:/Users/jordan.pierce/Downloads/TagLab/sampleProjects/data/segmentation"
@@ -18,4 +20,20 @@ tiler = YoloTiler(
     config=config,
 )
 
-tiler.run()
+class TestYoloTiler(unittest.TestCase):
+
+    @patch('yolo_tiler.YoloTiler._save_tile')
+    def test_logging_functionality(self, mock_save_tile):
+        with self.assertLogs('YoloTiler', level='INFO') as log:
+            tiler.run()
+            self.assertIn('INFO:YoloTiler:Saved tile image to', log.output[0])
+            self.assertIn('INFO:YoloTiler:Saved tile labels to', log.output[1])
+
+    @patch('yolo_tiler.tqdm')
+    def test_progress_bar(self, mock_tqdm):
+        tiler.run()
+        self.assertTrue(mock_tqdm.called)
+
+if __name__ == '__main__':
+    unittest.main()
+
