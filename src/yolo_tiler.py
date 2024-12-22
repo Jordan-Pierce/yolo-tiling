@@ -1,15 +1,14 @@
-import pandas as pd
-import numpy as np
-from PIL import Image
-from shapely.geometry import Polygon, MultiPolygon
-from pathlib import Path
-from typing import List, Tuple, Optional, Union, Generator
-from dataclasses import dataclass
-import glob
-from shutil import copyfile
 import logging
 import math
-import yaml
+from dataclasses import dataclass
+from pathlib import Path
+from shutil import copyfile
+from typing import List, Tuple, Optional, Union, Generator
+
+import numpy as np
+import pandas as pd
+from PIL import Image
+from shapely.geometry import Polygon, MultiPolygon
 
 
 @dataclass
@@ -25,6 +24,10 @@ class TileConfig:
     ext: str  
     # type of annotation
     annotation_type: str = "object_detection"  
+    # densify factor for segmentation (smaller = more points)
+    densify_factor: float = 0.01
+    # smoothing tolerance for segmentation (smaller = less smoothing)
+    smoothing_tolerance: float = 0.99
 
     def __post_init__(self):
         """Validate configuration parameters"""
@@ -34,6 +37,10 @@ class TileConfig:
             raise ValueError("Overlap must be non-negative")
         if not all(o < s for o, s in zip(self.overlap_wh, self.slice_wh)):
             raise ValueError("Overlap must be less than slice size")
+        if self.densify_factor <= 0 or self.densify_factor >= 1:
+            raise ValueError("Densify factor must be between 0 and 1")
+        if self.smoothing_tolerance <= 0 or self.smoothing_tolerance >= 1:
+            raise ValueError("Smoothing tolerance must be between 0 and 1")
 
 
 class YoloTiler:
@@ -133,43 +140,101 @@ class YoloTiler:
                     y1 = max(0, y2 - slice_h)
 
                 yield (x1, y1, x2, y2)
-                
-    def _normalize_coordinates(self, 
-                               coords: List[Tuple[float, float]], 
-                               tile_bounds: Tuple[int, int, int, int]) -> List[str]:
-            """
-            Normalize coordinates to [0,1] range relative to tile bounds.
-            
-            Args:
-                coords: List of (x,y) coordinates
-                tile_bounds: (x1, y1, x2, y2) of tile bounds
-                
-            Returns:
-                List of normalized coordinate strings
-            """
-            x1, y1, x2, y2 = tile_bounds
-            tile_width = x2 - x1
-            tile_height = y2 - y1
-            
-            normalized = []
-            for x, y in coords:
-                normalized.append(f"{(x - x1) / tile_width:.6f},{(y - y1) / tile_height:.6f}")
-                
-            return normalized
 
-    def _process_intersection(self, intersection: Union[Polygon, MultiPolygon]) -> List[Tuple[float, float]]:
+    def _process_intersection(self, intersection: Union[Polygon, MultiPolygon]) -> List[List[Tuple[float, float]]]:
         """
-        Process intersection geometry to get coordinate list.
+        Process intersection geometry with improved quality.
         
         Args:
             intersection: Shapely geometry object
             
         Returns:
-            List of coordinates
+            List of coordinate lists (exterior + holes)
         """
+        def densify_line(coords: List[Tuple[float, float]], factor: float) -> List[Tuple[float, float]]:
+            """Add points along line segments to increase resolution"""
+            result = []
+            for i in range(len(coords) - 1):
+                p1, p2 = coords[i], coords[i + 1]
+                dx = p2[0] - p1[0]
+                dy = p2[1] - p1[1]
+                segment_length = math.sqrt(dx * dx + dy * dy)
+                steps = int(segment_length / factor)
+                
+                if steps > 1:
+                    for step in range(steps):
+                        t = step / steps
+                        x = p1[0] + t * dx
+                        y = p1[1] + t * dy
+                        result.append((x, y))
+                else:
+                    result.append(p1)
+                    
+            result.append(coords[-1])
+            return result
+
+        def process_polygon(poly: Polygon) -> List[List[Tuple[float, float]]]:
+            # Calculate densification distance based on polygon size
+            perimeter = poly.length
+            dense_distance = perimeter * self.config.densify_factor
+            
+            # Process exterior ring
+            coords = list(poly.exterior.coords)[:-1]
+            dense_coords = densify_line(coords, dense_distance)
+            
+            # Create simplified version for smoothing
+            dense_poly = Polygon(dense_coords)
+            smoothed = dense_poly.simplify(self.config.smoothing_tolerance, preserve_topology=True)
+            
+            result = [list(smoothed.exterior.coords)[:-1]]
+            
+            # Process interior rings (holes)
+            for interior in poly.interiors:
+                coords = list(interior.coords)[:-1]
+                dense_coords = densify_line(coords, dense_distance)
+                hole_poly = Polygon(dense_coords)
+                smoothed_hole = hole_poly.simplify(self.config.smoothing_tolerance, preserve_topology=True)
+                result.append(list(smoothed_hole.exterior.coords)[:-1])
+                
+            return result
+
         if isinstance(intersection, Polygon):
-            return list(intersection.exterior.coords)[:-1]
-        return list(max(intersection.geoms, key=lambda p: p.area).exterior.coords)[:-1]
+            return process_polygon(intersection)
+        else:  # MultiPolygon
+            all_coords = []
+            # Process all polygons, not just the largest
+            for poly in intersection.geoms:
+                all_coords.extend(process_polygon(poly))
+            return all_coords
+
+    def _normalize_coordinates(self, 
+                               coord_lists: List[List[Tuple[float, float]]], 
+                               tile_bounds: Tuple[int, int, int, int]) -> str:
+        """
+        Normalize coordinates to [0,1] range relative to tile bounds.
+        
+        Args:
+            coord_lists: List of coordinate lists (exterior + holes)
+            tile_bounds: (x1, y1, x2, y2) of tile bounds
+            
+        Returns:
+            Space-separated string of normalized coordinates
+        """
+        x1, y1, x2, y2 = tile_bounds
+        tile_width = x2 - x1
+        tile_height = y2 - y1
+        
+        normalized_parts = []
+        for coords in coord_lists:
+            normalized = []
+            for x, y in coords:
+                norm_x = (x - x1) / tile_width
+                norm_y = (y - y1) / tile_height
+                normalized.append(f"{norm_x:.6f} {norm_y:.6f}")
+            normalized_parts.append(normalized)
+        
+        # Join all parts with special separator
+        return " ".join([" ".join(part) for part in normalized_parts])
 
     def _save_labels(self, labels: List, path: Path, is_segmentation: bool) -> None:
         """
@@ -195,7 +260,7 @@ class YoloTiler:
         Args:
             image_path: Path to image file
             label_path: Path to label file
-            folder: Subfolder name (train, valid, test) for image and label files
+            folder: Subfolder name (train, valid, test)
         """
         # Read image and labels
         image = Image.open(image_path)
@@ -244,10 +309,10 @@ class YoloTiler:
                     intersection = tile_polygon.intersection(box_polygon)
                     
                     if self.config.annotation_type == "instance_segmentation":
-                        # Handle instance segmentation
-                        coords = self._process_intersection(intersection)
-                        normalized = self._normalize_coordinates(coords, (x1, y1, x2, y2))
-                        tile_labels.append([box_class, " ".join(normalized)])
+                        # Handle instance segmentation with improved processing
+                        coord_lists = self._process_intersection(intersection)
+                        normalized = self._normalize_coordinates(coord_lists, (x1, y1, x2, y2))
+                        tile_labels.append([box_class, normalized])
                     else:
                         # Handle object detection
                         bbox = intersection.envelope
@@ -259,62 +324,10 @@ class YoloTiler:
                         new_y = (center.y - y1) / (y2 - y1)
                         tile_labels.append([box_class, new_x, new_y, new_width, new_height])
 
-            # Save tile and annotations
-            tile_suffix = f'_tile_{tile_idx}{self.config.ext}'
-            self._save_tile(tile_data, image_path, tile_suffix, tile_labels, folder)
-                
-    def _process_tile(self, 
-                      image: np.ndarray, 
-                      boxes: List[Tuple[int, Polygon]],
-                      i: int, 
-                      j: int, 
-                      image_path: Path, 
-                      height: int) -> None:
-        """
-        Process a single tile from the image.
-
-        Args:
-            image: Full image array
-            boxes: List of (class, polygon) tuples
-            i, j: Tile indices
-            image_path: Path to original image
-            height: Image height
-        """
-        tile_size = self.config.size
-        x1 = j * tile_size
-        y1 = height - (i * tile_size)
-        x2 = ((j + 1) * tile_size) - 1
-        y2 = (height - (i + 1) * tile_size) + 1
-
-        tile_polygon = Polygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])
-        tile_labels = []
-        tile_saved = False
-
-        for box_class, box_polygon in boxes:
-            if tile_polygon.intersects(box_polygon):
-                if not tile_saved:
-                    tile_image = image[i * tile_size: (i + 1) * tile_size, j * tile_size: (j + 1) * tile_size]
-                    self._save_tile_image(tile_image, image_path, i, j)
-                    tile_saved = True
-
-                intersection = tile_polygon.intersection(box_polygon)
-                if self.config.annotation_type == "instance_segmentation":
-                    coords = self._process_intersection(intersection)
-                    normalized = self._normalize_coordinates(coords, (x1, y1, x2, y2))
-                    tile_labels.append([box_class, " ".join(normalized)])
-                else:
-                    bbox = intersection.envelope
-                    center = bbox.centroid
-                    x, y = bbox.exterior.coords.xy
-                    new_width = (max(x) - min(x)) / tile_size
-                    new_height = (max(y) - min(y)) / tile_size
-                    new_x = (center.coords.xy[0][0] - x1) / tile_size
-                    new_y = (y1 - center.coords.xy[1][0]) / tile_size
-                    tile_labels.append([box_class, new_x, new_y, new_width, new_height])
-
-        # Save tile labels
-        output_path = self.target / image_path.with_suffix('.txt').name.replace(self.config.ext, f'_{i}_{j}.txt')
-        self._save_labels(tile_labels, output_path, self.config.annotation_type == "instance_segmentation")
+            # Save tile and annotations if it contains objects
+            if has_annotations or not self.config.annotation_type == "instance_segmentation":
+                tile_suffix = f'_tile_{tile_idx}{self.config.ext}'
+                self._save_tile(tile_data, image_path, tile_suffix, tile_labels, folder)
 
     def _save_tile(self,
                    tile_data: np.ndarray, 
@@ -330,12 +343,12 @@ class YoloTiler:
             original_path: Path to original image
             suffix: Suffix for the tile filename
             labels: List of labels for the tile
-            folder: Subfolder name (train, valid, test) for image and label files
+            folder: Subfolder name (train, valid, test)
         """
         # Set the save directory
         save_dir = self.target / folder
 
-        # Save the image in the appropriate directory
+        # Save the image
         image_path = save_dir / "images" / original_path.name.replace(self.config.ext, suffix)
         Image.fromarray(tile_data).save(image_path)
         
