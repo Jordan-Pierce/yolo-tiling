@@ -2,3 +2,4 @@ yolosample/
 yolosliced/
 __pycache__/
 *.egg-info/
+.idea
