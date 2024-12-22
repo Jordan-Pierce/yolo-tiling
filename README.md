@@ -1,8 +1,10 @@
-# YOLO Dataset tiling script
+# YOLO Dataset tiling 
 
 ## Tile (slice) YOLO Dataset for Small Objects Detection and Instance Segmentation
 
-This script can cut images and corresponding labels from YOLO dataset into tiles of specified size and create a new dataset based on these tiles. It supports both object detection and instance segmentation. More details you can find in the <a href="https://towardsdatascience.com/tile-slice-yolo-dataset-for-small-objects-detection-a75bf26f7fa2">article</a>.
+This module can cut images and corresponding labels from YOLO dataset into tiles of specified size and create a 
+new dataset based on these tiles. It supports both object detection and instance segmentation. More details you can find 
+in the <a href="https://supervision.roboflow.com/develop/detection/tools/inference_slicer/#supervision.detection.tools.inference_slicer.InferenceSlicer">docs</a>.
 
 ## Installation
 
@@ -12,47 +14,30 @@ To install the package, use pip:
 pip install yolo-tiling
 ```
 
-## Usage 
-
-`python3 -m yolo_tiling -source ./yolosample/ts/ -target ./yolosliced/ts/ -ext .JPG -size 512`
-
-## Arguments
-
-- **-source**        Source folder with images and labels needed to be tiled. Default: ./yolosample/ts/
-- **-target**        Target folder for a new sliced dataset. Default: ./yolosliced/ts/
-- **-ext**           Image extension in a dataset. Default: .JPG
-- **-falsefolder**   Folder for tiles without bounding boxes
-- **-size**          Size of a tile. Default: 416
-- **-ratio**         Train/test split ratio. Dafault: 0.8
-
-## Instance Segmentation Usage
-
-To tile instance segmentation datasets, use the following command:
-
-`python3 -m yolo_tiling -source ./yolosample/ts/ -target ./yolosliced/ts/ -ext .JPG -size 512 -annotation_type instance_segmentation`
-
-## Class-based Usage
-
-To use the script as a class, you can create an instance of the `YoloTiler` class and call its `run` method:
+## Usage
 
 ```python
 from yolo_tiling import YoloTiler
 
-yolo_tiler = YoloTiler(source="./yolosample/ts/", target="./yolosliced/ts/", ext=".JPG", falsefolder=None, size=512, ratio=0.8)
-yolo_tiler.run()
-```
+config = TileConfig(
+    slice_wh=(640, 480),  # Slice width and height
+    overlap_wh=(64, 48),  # Overlap width and height (10% overlap in this example)
+    ratio=0.8,  # Train/test split ratio
+    ext=".jpg",
+    annotation_type="object_detection"
+)
 
-## Class-based Usage for Instance Segmentation
+tiler = YoloTiler(
+    source="./yolosample/ts/",
+    target="./yolosliced/ts/",
+    config=config,
+    false_folder="./false_tiles/"
+)
 
-To use the script as a class for instance segmentation, you can create an instance of the `YoloTiler` class and call its `run` method with the `annotation_type` argument set to `instance_segmentation`:
-
-```python
-from yolo_tiling import YoloTiler
-
-yolo_tiler = YoloTiler(source="./yolosample/ts/", target="./yolosliced/ts/", ext=".JPG", falsefolder=None, size=512, ratio=0.8, annotation_type="instance_segmentation")
-yolo_tiler.run()
+tiler.run()
 ```
 
 ## Note
 
-The source and target folders must be YOLO formatted with `train`, `val`, `test` subfolders, each containing `images/` and `labels/` subfolders.
+The source and target folders must be YOLO formatted with `train`, `val`, `test` subfolders, each containing 
+`images/` and `labels/` subfolders.
