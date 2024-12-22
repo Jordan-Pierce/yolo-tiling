@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 from shapely.geometry import Polygon, MultiPolygon
+from tqdm import tqdm
 
 
 @dataclass
@@ -125,11 +126,12 @@ class YoloTiler:
         num_tiles_w = math.ceil((img_w - overlap_w) / step_w)
         num_tiles_h = math.ceil((img_h - overlap_h) / step_h)
 
-        for i in range(num_tiles_h):
-            for j in range(num_tiles_w):
-                # Calculate tile coordinates
-                x1 = j * step_w
-                y1 = i * step_h
+        # Generate tile positions using numpy for faster calculations
+        x_coords = np.arange(0, img_w, step_w)
+        y_coords = np.arange(0, img_h, step_h)
+
+        for y1 in y_coords:
+            for x1 in x_coords:
                 x2 = min(x1 + slice_w, img_w)
                 y2 = min(y1 + slice_h, img_h)
 
@@ -351,6 +353,7 @@ class YoloTiler:
         # Save the image
         image_path = save_dir / "images" / original_path.name.replace(self.config.ext, suffix)
         Image.fromarray(tile_data).save(image_path)
+        self.logger.info(f"Saved tile image to {image_path}")
         
         if labels:
             # Save the labels in the appropriate directory
@@ -364,6 +367,7 @@ class YoloTiler:
             else:
                 df = pd.DataFrame(labels, columns=['class', 'x1', 'y1', 'w', 'h'])
                 df.to_csv(label_path, sep=' ', index=False, header=False, float_format='%.6f')
+            self.logger.info(f"Saved tile labels to {label_path}")
 
     def _save_tile_image(self, tile_array: np.ndarray, original_path: Path, i: int, j: int) -> None:
         """
@@ -405,7 +409,7 @@ class YoloTiler:
                     continue
 
                 # Process each image
-                for image_path, label_path in list(zip(image_paths, label_paths)):
+                for image_path, label_path in tqdm(list(zip(image_paths, label_paths)), desc=f"Processing {subfolder} images"):
                     assert image_path.stem == label_path.stem, "Image and label filenames do not match"
                     self.logger.info(f'Processing {image_path}')
                     self.tile_image(image_path, label_path, subfolder)
