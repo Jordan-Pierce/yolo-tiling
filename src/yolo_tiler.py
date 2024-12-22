@@ -10,6 +10,7 @@ import pandas as pd
 from PIL import Image
 from shapely.geometry import Polygon, MultiPolygon
 from tqdm import tqdm
+import random
 
 
 @dataclass
@@ -29,6 +30,10 @@ class TileConfig:
     densify_factor: float = 0.01
     # smoothing tolerance for segmentation (smaller = less smoothing)
     smoothing_tolerance: float = 0.99
+    # train/valid/test split ratios
+    train_ratio: float = 0.7
+    valid_ratio: float = 0.2
+    test_ratio: float = 0.1
 
     def __post_init__(self):
         """Validate configuration parameters"""
@@ -42,6 +47,8 @@ class TileConfig:
             raise ValueError("Densify factor must be between 0 and 1")
         if self.smoothing_tolerance <= 0 or self.smoothing_tolerance >= 1:
             raise ValueError("Smoothing tolerance must be between 0 and 1")
+        if not math.isclose(self.train_ratio + self.valid_ratio + self.test_ratio, 1.0):
+            raise ValueError("Train, valid, and test ratios must sum to one")
 
 
 class YoloTiler:
@@ -384,12 +391,67 @@ class YoloTiler:
         Image.fromarray(tile_array).save(save_path)
         self.logger.info(f"Saved tile to {save_path}")
 
+    def split_data(self) -> None:
+        """
+        Split train data into train, valid, and test sets using specified ratios.
+        """
+        train_images = list((self.source / 'train' / 'images').glob(f'*{self.config.ext}'))
+        train_labels = list((self.source / 'train' / 'labels').glob('*.txt'))
+
+        if not train_images or not train_labels:
+            self.logger.warning("No train data found to split")
+            return
+
+        combined = list(zip(train_images, train_labels))
+        random.shuffle(combined)
+        train_images, train_labels = zip(*combined)
+
+        num_train = int(len(train_images) * self.config.train_ratio)
+        num_valid = int(len(train_images) * self.config.valid_ratio)
+        num_test = len(train_images) - num_train - num_valid
+
+        train_set = combined[:num_train]
+        valid_set = combined[num_train:num_train + num_valid]
+        test_set = combined[num_train + num_valid:]
+
+        for image_path, label_path in train_set:
+            self._save_split_data(image_path, label_path, 'train')
+
+        for image_path, label_path in valid_set:
+            self._save_split_data(image_path, label_path, 'valid')
+
+        for image_path, label_path in test_set:
+            self._save_split_data(image_path, label_path, 'test')
+
+    def _save_split_data(self, image_path: Path, label_path: Path, folder: str) -> None:
+        """
+        Save split data to the appropriate folder.
+
+        Args:
+            image_path: Path to image file
+            label_path: Path to label file
+            folder: Subfolder name (train, valid, test)
+        """
+        save_dir = self.target / folder
+        save_image_path = save_dir / "images" / image_path.name
+        save_label_path = save_dir / "labels" / label_path.name
+
+        copyfile(image_path, save_image_path)
+        copyfile(label_path, save_label_path)
+
     def run(self) -> None:
         """Run the complete tiling process"""
         try:
             # Validate directories
             self._validate_yolo_structure(self.source)
             self._create_target_folder(self.target)
+
+            # Check if valid or test folders are empty
+            valid_images = list((self.source / 'valid' / 'images').glob(f'*{self.config.ext}'))
+            test_images = list((self.source / 'test' / 'images').glob(f'*{self.config.ext}'))
+
+            if not valid_images or not test_images:
+                self.split_data()
 
             # Train, valid, test subfolders
             for subfolder in self.subfolders:
