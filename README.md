@@ -67,6 +67,5 @@ python src/yolo_tiler.py path/to/dataset path/to/tiled_dataset --annotation_type
 ```
 
 ## Note
-g
 The source and target folders must be YOLO formatted with `train`, `val`, `test` subfolders, each containing 
 `images/` and `labels/` subfolders.
