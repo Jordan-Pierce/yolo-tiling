@@ -10,7 +10,8 @@ config = TileConfig(
     annotation_type="instance_segmentation",
     train_ratio=0.7,
     valid_ratio=0.2,
-    test_ratio=0.1
+    test_ratio=0.1,
+    margins=(100, 100, 100, 100),  # Left, top, right, bottom
 )
 
 tiler = YoloTiler(

@@ -16,39 +16,64 @@ import argparse
 
 @dataclass
 class TileConfig:
-    """Configuration for tiling parameters"""
-    # (width, height) of each slice
-    slice_wh: Tuple[int, int]  
-    # (width, height) overlap between slices
-    overlap_wh: Tuple[Union[int, float], Union[int, float]]
-    # image extension
-    ext: str  
-    # type of annotation
-    annotation_type: str = "object_detection"  
-    # densify factor for segmentation (smaller = more points)
-    densify_factor: float = 0.01
-    # smoothing tolerance for segmentation (smaller = less smoothing)
-    smoothing_tolerance: float = 0.99
-    # train/valid/test split ratios
-    train_ratio: float = 0.7
-    valid_ratio: float = 0.2
-    test_ratio: float = 0.1
+    def __init__(self,
+                 slice_size: Union[int, Tuple[int, int]],
+                 overlap: Union[int, float] = 0,
+                 densify_factor: float = 0.5,
+                 smoothing_tolerance: float = 0.1,
+                 train_ratio: float = 0.8,
+                 valid_ratio: float = 0.1,
+                 test_ratio: float = 0.1,
+                 margins: Union[float, Tuple[float, float, float, float]] = 0.0):
+        """
+        Args:
+            margins: Either a single float (0-1) for uniform margins,
+                    or tuple (left, top, right, bottom) of floats (0-1) or ints
+        """
+        self.slice_size = slice_size if isinstance(slice_size, tuple) else (slice_size, slice_size)
+        self.overlap = overlap
+        self.densify_factor = densify_factor
+        self.smoothing_tolerance = smoothing_tolerance
+        self.train_ratio = train_ratio
+        self.valid_ratio = valid_ratio
+        self.test_ratio = test_ratio
+        
+        # Handle margins
+        if isinstance(margins, (int, float)):
+            self.margins = (margins, margins, margins, margins)
+        else:
+            self.margins = margins
+        
+        self._validate()
 
-    def __post_init__(self):
-        """Validate configuration parameters"""
-        if not all(x > 0 for x in self.slice_wh):
-            raise ValueError("Slice dimensions must be positive")
-        if not all(isinstance(x, (int, float)) and x >= 0 for x in self.overlap_wh):
-            raise ValueError("Overlap must be non-negative and either an integer or a float between 0 and 1")
-        if not all((isinstance(o, int) and o < s) or (isinstance(o, float) and 0 <= o < 1) for o, s in zip(self.overlap_wh, self.slice_wh)):
-            raise ValueError("Overlap must be less than slice size if integer, or between 0 and 1 if float")
-        if self.densify_factor <= 0 or self.densify_factor >= 1:
-            raise ValueError("Densify factor must be between 0 and 1")
-        if self.smoothing_tolerance <= 0 or self.smoothing_tolerance >= 1:
-            raise ValueError("Smoothing tolerance must be between 0 and 1")
-        if not math.isclose(self.train_ratio + self.valid_ratio + self.test_ratio, 1.0):
-            raise ValueError("Train, valid, and test ratios must sum to one")
+    def _validate(self):
+        # Add to existing validation
+        if isinstance(self.margins[0], float):
+            if not all(0 <= m <= 1 for m in self.margins):
+                raise ValueError("Float margins must be between 0 and 1")
+        elif isinstance(self.margins[0], int):
+            if not all(m >= 0 for m in self.margins):
+                raise ValueError("Integer margins must be non-negative")
+        else:
+            raise ValueError("Margins must be int or float")
 
+    def get_effective_area(self, image_width: int, image_height: int) -> Tuple[int, int, int, int]:
+        """Calculate the effective area after applying margins"""
+        left, top, right, bottom = self.margins
+        
+        if isinstance(left, float):
+            x_min = int(image_width * left)
+            y_min = int(image_height * top)
+            x_max = int(image_width * (1 - right))
+            y_max = int(image_height * (1 - bottom))
+        else:
+            x_min = left
+            y_min = top
+            x_max = image_width - right
+            y_max = image_height - bottom
+            
+        return x_min, y_min, x_max, y_max
+    
 
 class YoloTiler:
     """
