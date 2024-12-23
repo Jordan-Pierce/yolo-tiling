@@ -314,6 +314,11 @@ class YoloTiler:
         image_array = np.array(image, dtype=np.uint8)
         width, height = image.size
 
+        # Get effective area
+        x_min, y_min, x_max, y_max = self.config.get_effective_area(width, height)
+        effective_width = x_max - x_min
+        effective_height = y_max - y_min
+
         # Process annotations
         boxes = []
         with open(label_path) as f:
@@ -343,9 +348,9 @@ class YoloTiler:
                     boxes.append((class_id, Polygon(points)))
 
         # Process each tile
-        for tile_idx, (x1, y1, x2, y2) in tqdm(enumerate(self._calculate_tile_positions((width, height)))):
-            tile_data = image_array[y1:y2, x1:x2]
-            tile_polygon = Polygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])
+        for tile_idx, (x1, y1, x2, y2) in tqdm(enumerate(self._calculate_tile_positions((effective_width, effective_height)))):
+            tile_data = image_array[y1 + y_min:y2 + y_min, x1 + x_min:x2 + x_min]
+            tile_polygon = Polygon([(x1 + x_min, y1 + y_min), (x2 + x_min, y1 + y_min), (x2 + x_min, y2 + y_min), (x1 + x_min, y2 + y_min)])
             tile_labels = []
 
             # Process annotations for this tile
