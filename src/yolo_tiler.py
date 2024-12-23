@@ -19,9 +19,7 @@ class TileConfig:
     # (width, height) of each slice
     slice_wh: Tuple[int, int]  
     # (width, height) overlap between slices
-    overlap_wh: Tuple[int, int]  
-    # train/test split ratio
-    ratio: float  
+    overlap_wh: Tuple[int, int]
     # image extension
     ext: str  
     # type of annotation
@@ -309,12 +307,10 @@ class YoloTiler:
             tile_data = image_array[y1:y2, x1:x2]
             tile_polygon = Polygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])
             tile_labels = []
-            has_annotations = False
 
             # Process annotations for this tile
             for box_class, box_polygon in boxes:
                 if tile_polygon.intersects(box_polygon):
-                    has_annotations = True
                     intersection = tile_polygon.intersection(box_polygon)
                     
                     if self.config.annotation_type == "instance_segmentation":
@@ -334,7 +330,7 @@ class YoloTiler:
                         tile_labels.append([box_class, new_x, new_y, new_width, new_height])
 
             # Save tile and annotations if it contains objects
-            if has_annotations or not self.config.annotation_type == "instance_segmentation":
+            if not self.config.annotation_type == "instance_segmentation":
                 tile_suffix = f'_tile_{tile_idx}{self.config.ext}'
                 self._save_tile(tile_data, image_path, tile_suffix, tile_labels, folder)
 
@@ -360,8 +356,7 @@ class YoloTiler:
         # Save the image
         image_path = save_dir / "images" / original_path.name.replace(self.config.ext, suffix)
         Image.fromarray(tile_data).save(image_path)
-        self.logger.info(f"Saved tile image to {image_path}")
-        
+
         if labels:
             # Save the labels in the appropriate directory
             label_path = save_dir / "labels" / original_path.name.replace(self.config.ext, suffix)
@@ -374,7 +369,6 @@ class YoloTiler:
             else:
                 df = pd.DataFrame(labels, columns=['class', 'x1', 'y1', 'w', 'h'])
                 df.to_csv(label_path, sep=' ', index=False, header=False, float_format='%.6f')
-            self.logger.info(f"Saved tile labels to {label_path}")
 
     def _save_tile_image(self, tile_array: np.ndarray, original_path: Path, i: int, j: int) -> None:
         """
@@ -394,9 +388,10 @@ class YoloTiler:
     def split_data(self) -> None:
         """
         Split train data into train, valid, and test sets using specified ratios.
+        Files are moved from train to valid/test directories.
         """
-        train_images = list((self.source / 'train' / 'images').glob(f'*{self.config.ext}'))
-        train_labels = list((self.source / 'train' / 'labels').glob('*.txt'))
+        train_images = list((self.target / 'train' / 'images').glob(f'*{self.config.ext}'))
+        train_labels = list((self.target / 'train' / 'labels').glob('*.txt'))
 
         if not train_images or not train_labels:
             self.logger.warning("No train data found to split")
@@ -408,36 +403,32 @@ class YoloTiler:
 
         num_train = int(len(train_images) * self.config.train_ratio)
         num_valid = int(len(train_images) * self.config.valid_ratio)
-        num_test = len(train_images) - num_train - num_valid
 
-        train_set = combined[:num_train]
         valid_set = combined[num_train:num_train + num_valid]
         test_set = combined[num_train + num_valid:]
 
-        for image_path, label_path in train_set:
-            self._save_split_data(image_path, label_path, 'train')
-
+        # Move files to valid folder
         for image_path, label_path in valid_set:
-            self._save_split_data(image_path, label_path, 'valid')
+            self._move_split_data(image_path, label_path, 'valid')
 
+        # Move files to test folder
         for image_path, label_path in test_set:
-            self._save_split_data(image_path, label_path, 'test')
+            self._move_split_data(image_path, label_path, 'test')
 
-    def _save_split_data(self, image_path: Path, label_path: Path, folder: str) -> None:
+    def _move_split_data(self, image_path: Path, label_path: Path, folder: str) -> None:
         """
-        Save split data to the appropriate folder.
+        Move split data to the appropriate folder.
 
         Args:
             image_path: Path to image file
             label_path: Path to label file
-            folder: Subfolder name (train, valid, test)
+            folder: Subfolder name (valid or test)
         """
-        save_dir = self.target / folder
-        save_image_path = save_dir / "images" / image_path.name
-        save_label_path = save_dir / "labels" / label_path.name
+        target_image = self.source / folder / "images" / image_path.name
+        target_label = self.source / folder / "labels" / label_path.name
 
-        copyfile(image_path, save_image_path)
-        copyfile(label_path, save_label_path)
+        image_path.rename(target_image)
+        label_path.rename(target_label)
 
     def run(self) -> None:
         """Run the complete tiling process"""
@@ -445,13 +436,6 @@ class YoloTiler:
             # Validate directories
             self._validate_yolo_structure(self.source)
             self._create_target_folder(self.target)
-
-            # Check if valid or test folders are empty
-            valid_images = list((self.source / 'valid' / 'images').glob(f'*{self.config.ext}'))
-            test_images = list((self.source / 'test' / 'images').glob(f'*{self.config.ext}'))
-
-            if not valid_images or not test_images:
-                self.split_data()
 
             # Train, valid, test subfolders
             for subfolder in self.subfolders:
@@ -471,12 +455,20 @@ class YoloTiler:
                     continue
 
                 # Process each image
-                for image_path, label_path in tqdm(list(zip(image_paths, label_paths)), desc=f"Processing {subfolder} images"):
+                for image_path, label_path in tqdm(list(zip(image_paths, label_paths))):
                     assert image_path.stem == label_path.stem, "Image and label filenames do not match"
                     self.logger.info(f'Processing {image_path}')
                     self.tile_image(image_path, label_path, subfolder)
 
             self.logger.info('Tiling process completed successfully')
+            
+            # Check if valid or test folders are empty
+            valid_images = list((self.target / 'valid' / 'images').glob(f'*{self.config.ext}'))
+            test_images = list((self.target / 'test' / 'images').glob(f'*{self.config.ext}'))
+
+            if not valid_images or not test_images:
+                self.split_data()
+                self.logger.info('Split train data into valid and test sets')
             
             # Copy data.yaml
             data_yaml = self.source / 'data.yaml'
