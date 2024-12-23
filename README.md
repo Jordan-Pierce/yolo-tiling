@@ -17,21 +17,25 @@ pip install yolo-tiling
 ## Usage
 
 ```python
-from yolo_tiling import YoloTiler
+from yolo_tiler import YoloTiler, TileConfig
+
+src = "path/to/dataset"
+dst = "path/to/tiled_dataset"
 
 config = TileConfig(
     slice_wh=(640, 480),  # Slice width and height
     overlap_wh=(64, 48),  # Overlap width and height (10% overlap in this example)
-    ratio=0.8,  # Train/test split ratio
-    ext=".jpg",
-    annotation_type="object_detection"
+    ext=".png",
+    annotation_type="instance_segmentation",
+    train_ratio=0.7,
+    valid_ratio=0.2,
+    test_ratio=0.1
 )
 
 tiler = YoloTiler(
-    source="./yolosample/ts/",
-    target="./yolosliced/ts/",
+    source=src,
+    target=dst,
     config=config,
-    false_folder="./false_tiles/"
 )
 
 tiler.run()

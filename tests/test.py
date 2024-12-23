@@ -1,4 +1,3 @@
-import os
 from yolo_tiler import YoloTiler, TileConfig
 
 src = "C:/Users/jordan.pierce/Downloads/TagLab/sampleProjects/data/segmentation"
