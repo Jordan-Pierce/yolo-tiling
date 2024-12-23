@@ -67,16 +67,6 @@ python src/yolo_tiler.py path/to/dataset path/to/tiled_dataset --annotation_type
 ```
 
 ## Note
-
+g
 The source and target folders must be YOLO formatted with `train`, `val`, `test` subfolders, each containing 
 `images/` and `labels/` subfolders.
-
-## New Features
-
-### Progress Bar
-
-The `run` method now includes a progress bar for better user experience. This progress bar provides a visual indication of the tiling process, making it easier to track the progress.
-
-### Enhanced Logging
-
-The logging functionality has been improved to provide more detailed information and error handling. This includes logging the saved tile path and labels, as well as any errors that occur during the tiling process.
