@@ -17,8 +17,10 @@ import argparse
 @dataclass
 class TileConfig:
     def __init__(self,
-                 slice_size: Union[int, Tuple[int, int]],
-                 overlap: Union[int, float] = 0,
+                 slice_wh: Union[int, Tuple[int, int]],
+                 overlap_wh: Union[int, Tuple[float, float]] = 0,
+                 annotation_type: str = "object_detection",
+                 ext: str = ".png",
                  densify_factor: float = 0.5,
                  smoothing_tolerance: float = 0.1,
                  train_ratio: float = 0.8,
@@ -30,8 +32,10 @@ class TileConfig:
             margins: Either a single float (0-1) for uniform margins,
                     or tuple (left, top, right, bottom) of floats (0-1) or ints
         """
-        self.slice_size = slice_size if isinstance(slice_size, tuple) else (slice_size, slice_size)
-        self.overlap = overlap
+        self.slice_wh = slice_wh if isinstance(slice_wh, tuple) else (slice_wh, slice_wh)
+        self.overlap_wh = overlap_wh
+        self.annotation_type = annotation_type
+        self.ext = ext
         self.densify_factor = densify_factor
         self.smoothing_tolerance = smoothing_tolerance
         self.train_ratio = train_ratio

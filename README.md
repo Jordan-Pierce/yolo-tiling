@@ -19,17 +19,49 @@ pip install yolo-tiling
 ```python
 from yolo_tiler import YoloTiler, TileConfig
 
-src = "path/to/dataset"
-dst = "path/to/tiled_dataset"
+src = "path/to/dataset"  # Source YOLO dataset directory
+dst = "path/to/tiled_dataset"  # Output directory for tiled dataset
 
 config = TileConfig(
-    slice_wh=(640, 480),  # Slice width and height
-    overlap_wh=(0.1, 0.1),  # Overlap width and height (10% overlap in this example)
+    # Size of each tile (width, height). Can be:
+    # - Single integer for square tiles: slice_wh=640
+    # - Tuple for rectangular tiles: slice_wh=(640, 480)
+    slice_wh=(640, 480),
+
+    # Overlap between adjacent tiles. Can be:
+    # - Single float (0-1) for uniform overlap percentage: overlap_wh=0.1
+    # - Tuple of floats for different overlap in each dimension: overlap_wh=(0.1, 0.1) 
+    # - Single integer for pixel overlap: overlap_wh=64
+    # - Tuple of integers for different pixel overlaps: overlap_wh=(64, 48)
+    overlap_wh=(0.1, 0.1),
+
+    # Image file extension to process
     ext=".png",
+
+    # Type of YOLO annotations to process:
+    # - "object_detection": Standard YOLO format (class, x, y, width, height)
+    # - "instance_segmentation": YOLO segmentation format (class, x1, y1, x2, y2, ...)
     annotation_type="instance_segmentation",
-    train_ratio=0.7,
-    valid_ratio=0.2,
-    test_ratio=0.1
+
+    # For segmentation only: Controls point density along polygon edges
+    # Lower values = more points, higher quality but larger files
+    densify_factor=0.5,
+
+    # For segmentation only: Controls polygon smoothing
+    # Lower values = more details preserved, higher values = smoother shapes
+    smoothing_tolerance=0.1,
+
+    # Dataset split ratios (must sum to 1.0)
+    train_ratio=0.7,  # Proportion of data for training
+    valid_ratio=0.2,  # Proportion of data for validation
+    test_ratio=0.1,   # Proportion of data for testing
+
+    # Optional margins to exclude from input images. Can be:
+    # - Single float (0-1) for uniform margin percentage: margins=0.1
+    # - Tuple of floats for different margins: margins=(0.1, 0.1, 0.1, 0.1)
+    # - Single integer for pixel margins: margins=64
+    # - Tuple of integers for different pixel margins: margins=(64, 64, 64, 64)
+    margins=0.0
 )
 
 tiler = YoloTiler(
@@ -39,6 +71,22 @@ tiler = YoloTiler(
 )
 
 tiler.run()
+```
+
+The tiler requires a YOLO dataset structure in both source and target directories. If only a `train` folder exists, the train / valid / test ratios will be used to split the tiled `train` folder; else, the ratios are ignored.
+
+```bash
+dataset/
+├── train/
+│   ├── images/
+│   └── labels/
+├── valid/
+│   ├── images/
+│   └── labels/
+├── test/
+│   ├── images/
+│   └── labels/
+└── data.yaml  # Optional
 ```
 
 ## Command Line Usage
@@ -65,7 +113,3 @@ python src/yolo_tiler.py path/to/dataset path/to/tiled_dataset --slice_wh 640 48
 ```bash
 python src/yolo_tiler.py path/to/dataset path/to/tiled_dataset --annotation_type instance_segmentation --ext .jpg
 ```
-
-## Note
-The source and target folders must be YOLO formatted with `train`, `val`, `test` subfolders, each containing 
-`images/` and `labels/` subfolders.
