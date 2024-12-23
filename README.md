@@ -113,3 +113,7 @@ python src/yolo_tiler.py path/to/dataset path/to/tiled_dataset --slice_wh 640 48
 ```bash
 python src/yolo_tiler.py path/to/dataset path/to/tiled_dataset --annotation_type instance_segmentation --ext .jpg
 ```
+
+### Memory Efficiency
+
+The `tile_image` method now uses rasterio's Window to read and process image tiles directly from the disk, instead of loading the entire image into memory. This makes the tiling process more memory efficient, especially for large images.
