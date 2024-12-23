@@ -158,7 +158,7 @@ class YoloTiler:
                 if y2 == img_h and y2 != y1 + slice_h:
                     y1 = max(0, y2 - slice_h)
 
-                yield (x1, y1, x2, y2)
+                yield x1, y1, x2, y2
 
     def _densify_line(self, coords: List[Tuple[float, float]], factor: float) -> List[Tuple[float, float]]:
         """Add points along line segments to increase resolution"""
@@ -315,7 +315,7 @@ class YoloTiler:
                     boxes.append((class_id, Polygon(points)))
 
         # Process each tile
-        for tile_idx, (x1, y1, x2, y2) in enumerate(self._calculate_tile_positions((width, height))):
+        for tile_idx, (x1, y1, x2, y2) in tqdm(enumerate(self._calculate_tile_positions((width, height)))):
             tile_data = image_array[y1:y2, x1:x2]
             tile_polygon = Polygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])
             tile_labels = []
@@ -325,12 +325,7 @@ class YoloTiler:
                 if tile_polygon.intersects(box_polygon):
                     intersection = tile_polygon.intersection(box_polygon)
                     
-                    if self.config.annotation_type == "instance_segmentation":
-                        # Handle instance segmentation with improved processing
-                        coord_lists = self._process_intersection(intersection)
-                        normalized = self._normalize_coordinates(coord_lists, (x1, y1, x2, y2))
-                        tile_labels.append([box_class, normalized])
-                    else:
+                    if self.config.annotation_type == "object_detection":
                         # Handle object detection
                         bbox = intersection.envelope
                         center = bbox.centroid
@@ -340,11 +335,15 @@ class YoloTiler:
                         new_x = (center.x - x1) / (x2 - x1)
                         new_y = (center.y - y1) / (y2 - y1)
                         tile_labels.append([box_class, new_x, new_y, new_width, new_height])
+                    else:
+                        # Handle instance segmentation with improved processing
+                        coord_lists = self._process_intersection(intersection)
+                        normalized = self._normalize_coordinates(coord_lists, (x1, y1, x2, y2))
+                        tile_labels.append([box_class, normalized])
 
-            # Save tile and annotations if it contains objects
-            if not self.config.annotation_type == "instance_segmentation":
-                tile_suffix = f'_tile_{tile_idx}{self.config.ext}'
-                self._save_tile(tile_data, image_path, tile_suffix, tile_labels, folder)
+            # Save tile image and labels
+            tile_suffix = f'_tile_{tile_idx}{self.config.ext}'
+            self._save_tile(tile_data, image_path, tile_suffix, tile_labels, folder)
 
     def _save_tile_image(self, tile_data: np.ndarray, image_path: Path, suffix: str, folder: str) -> None:
         """
@@ -362,6 +361,7 @@ class YoloTiler:
         # Save the image
         image_path = save_dir / "images" / image_path.name.replace(self.config.ext, suffix)
         Image.fromarray(tile_data).save(image_path)
+        self.logger.info(f"Saved tile to {image_path}")
 
     def _save_tile_labels(self, labels: Optional[List], image_path: Path, suffix: str, folder: str) -> None:
         """
@@ -398,21 +398,6 @@ class YoloTiler:
         """
         self._save_tile_image(tile_data, original_path, suffix, folder)
         self._save_tile_labels(labels, original_path, suffix, folder)
-
-    def _save_tile_image(self, tile_array: np.ndarray, original_path: Path, i: int, j: int) -> None:
-        """
-        Save a tile image to the appropriate directory.
-
-        Args:
-            tile_array: Numpy array of tile image
-            original_path: Path to original image
-            i, j: Tile indices
-        """
-        # Set the save directory
-        save_path = self.target / original_path.name.replace(self.config.ext, f'_{i}_{j}{self.config.ext}')
-        # Save the image
-        Image.fromarray(tile_array).save(save_path)
-        self.logger.info(f"Saved tile to {save_path}")
 
     def split_data(self) -> None:
         """
@@ -453,8 +438,8 @@ class YoloTiler:
             label_path: Path to label file
             folder: Subfolder name (valid or test)
         """
-        target_image = self.source / folder / "images" / image_path.name
-        target_label = self.source / folder / "labels" / label_path.name
+        target_image = self.target / folder / "images" / image_path.name
+        target_label = self.target / folder / "labels" / label_path.name
 
         image_path.rename(target_image)
         label_path.rename(target_label)
