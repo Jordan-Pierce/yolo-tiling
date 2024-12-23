@@ -108,6 +108,18 @@ class YoloTiler:
             if not (folder / subfolder / 'labels').exists():
                 raise ValueError(f"Required folder {folder / subfolder / 'labels'} does not exist")
 
+    def _calculate_step_size(self, slice_size: int, overlap: int) -> int:
+        """Calculate effective step size for tiling."""
+        return slice_size - overlap
+
+    def _calculate_num_tiles(self, img_size: int, step_size: int) -> int:
+        """Calculate number of tiles in one dimension."""
+        return math.ceil((img_size - step_size) / step_size)
+
+    def _generate_tile_positions(self, img_size: int, step_size: int) -> np.ndarray:
+        """Generate tile positions using numpy for faster calculations."""
+        return np.arange(0, img_size, step_size)
+
     def _calculate_tile_positions(self, 
                                   image_size: Tuple[int, int]) -> Generator[Tuple[int, int, int, int], None, None]:
         """
@@ -124,16 +136,16 @@ class YoloTiler:
         overlap_w, overlap_h = self.config.overlap_wh
 
         # Calculate effective step sizes
-        step_w = slice_w - overlap_w
-        step_h = slice_h - overlap_h
+        step_w = self._calculate_step_size(slice_w, overlap_w)
+        step_h = self._calculate_step_size(slice_h, overlap_h)
 
         # Calculate number of tiles in each dimension
-        num_tiles_w = math.ceil((img_w - overlap_w) / step_w)
-        num_tiles_h = math.ceil((img_h - overlap_h) / step_h)
+        num_tiles_w = self._calculate_num_tiles(img_w, step_w)
+        num_tiles_h = self._calculate_num_tiles(img_h, step_h)
 
         # Generate tile positions using numpy for faster calculations
-        x_coords = np.arange(0, img_w, step_w)
-        y_coords = np.arange(0, img_h, step_h)
+        x_coords = self._generate_tile_positions(img_w, step_w)
+        y_coords = self._generate_tile_positions(img_h, step_h)
 
         for y1 in y_coords:
             for x1 in x_coords:
@@ -148,6 +160,53 @@ class YoloTiler:
 
                 yield (x1, y1, x2, y2)
 
+    def _densify_line(self, coords: List[Tuple[float, float]], factor: float) -> List[Tuple[float, float]]:
+        """Add points along line segments to increase resolution"""
+        result = []
+        for i in range(len(coords) - 1):
+            p1, p2 = coords[i], coords[i + 1]
+            dx = p2[0] - p1[0]
+            dy = p2[1] - p1[1]
+            segment_length = math.sqrt(dx * dx + dy * dy)
+            steps = int(segment_length / factor)
+            
+            if steps > 1:
+                for step in range(steps):
+                    t = step / steps
+                    x = p1[0] + t * dx
+                    y = p1[1] + t * dy
+                    result.append((x, y))
+            else:
+                result.append(p1)
+                
+        result.append(coords[-1])
+        return result
+
+    def _process_polygon(self, poly: Polygon) -> List[List[Tuple[float, float]]]:
+        # Calculate densification distance based on polygon size
+        perimeter = poly.length
+        dense_distance = perimeter * self.config.densify_factor
+        
+        # Process exterior ring
+        coords = list(poly.exterior.coords)[:-1]
+        dense_coords = self._densify_line(coords, dense_distance)
+        
+        # Create simplified version for smoothing
+        dense_poly = Polygon(dense_coords)
+        smoothed = dense_poly.simplify(self.config.smoothing_tolerance, preserve_topology=True)
+        
+        result = [list(smoothed.exterior.coords)[:-1]]
+        
+        # Process interior rings (holes)
+        for interior in poly.interiors:
+            coords = list(interior.coords)[:-1]
+            dense_coords = self._densify_line(coords, dense_distance)
+            hole_poly = Polygon(dense_coords)
+            smoothed_hole = hole_poly.simplify(self.config.smoothing_tolerance, preserve_topology=True)
+            result.append(list(smoothed_hole.exterior.coords)[:-1])
+            
+        return result
+
     def _process_intersection(self, intersection: Union[Polygon, MultiPolygon]) -> List[List[Tuple[float, float]]]:
         """
         Process intersection geometry with improved quality.
@@ -158,60 +217,13 @@ class YoloTiler:
         Returns:
             List of coordinate lists (exterior + holes)
         """
-        def densify_line(coords: List[Tuple[float, float]], factor: float) -> List[Tuple[float, float]]:
-            """Add points along line segments to increase resolution"""
-            result = []
-            for i in range(len(coords) - 1):
-                p1, p2 = coords[i], coords[i + 1]
-                dx = p2[0] - p1[0]
-                dy = p2[1] - p1[1]
-                segment_length = math.sqrt(dx * dx + dy * dy)
-                steps = int(segment_length / factor)
-                
-                if steps > 1:
-                    for step in range(steps):
-                        t = step / steps
-                        x = p1[0] + t * dx
-                        y = p1[1] + t * dy
-                        result.append((x, y))
-                else:
-                    result.append(p1)
-                    
-            result.append(coords[-1])
-            return result
-
-        def process_polygon(poly: Polygon) -> List[List[Tuple[float, float]]]:
-            # Calculate densification distance based on polygon size
-            perimeter = poly.length
-            dense_distance = perimeter * self.config.densify_factor
-            
-            # Process exterior ring
-            coords = list(poly.exterior.coords)[:-1]
-            dense_coords = densify_line(coords, dense_distance)
-            
-            # Create simplified version for smoothing
-            dense_poly = Polygon(dense_coords)
-            smoothed = dense_poly.simplify(self.config.smoothing_tolerance, preserve_topology=True)
-            
-            result = [list(smoothed.exterior.coords)[:-1]]
-            
-            # Process interior rings (holes)
-            for interior in poly.interiors:
-                coords = list(interior.coords)[:-1]
-                dense_coords = densify_line(coords, dense_distance)
-                hole_poly = Polygon(dense_coords)
-                smoothed_hole = hole_poly.simplify(self.config.smoothing_tolerance, preserve_topology=True)
-                result.append(list(smoothed_hole.exterior.coords)[:-1])
-                
-            return result
-
         if isinstance(intersection, Polygon):
-            return process_polygon(intersection)
+            return self._process_polygon(intersection)
         else:  # MultiPolygon
             all_coords = []
             # Process all polygons, not just the largest
             for poly in intersection.geoms:
-                all_coords.extend(process_polygon(poly))
+                all_coords.extend(self._process_polygon(poly))
             return all_coords
 
     def _normalize_coordinates(self, 
@@ -334,6 +346,40 @@ class YoloTiler:
                 tile_suffix = f'_tile_{tile_idx}{self.config.ext}'
                 self._save_tile(tile_data, image_path, tile_suffix, tile_labels, folder)
 
+    def _save_tile_image(self, tile_data: np.ndarray, image_path: Path, suffix: str, folder: str) -> None:
+        """
+        Save a tile image to the appropriate directory.
+
+        Args:
+            tile_data: Numpy array of tile image
+            image_path: Path to original image
+            suffix: Suffix for the tile filename
+            folder: Subfolder name (train, valid, test)
+        """
+        # Set the save directory
+        save_dir = self.target / folder
+
+        # Save the image
+        image_path = save_dir / "images" / image_path.name.replace(self.config.ext, suffix)
+        Image.fromarray(tile_data).save(image_path)
+
+    def _save_tile_labels(self, labels: Optional[List], image_path: Path, suffix: str, folder: str) -> None:
+        """
+        Save tile labels to the appropriate directory.
+
+        Args:
+            labels: List of labels for the tile
+            image_path: Path to original image
+            suffix: Suffix for the tile filename
+            folder: Subfolder name (train, valid, test)
+        """
+        if labels:
+            # Save the labels in the appropriate directory
+            label_path = self.target / folder / "labels" / image_path.name.replace(self.config.ext, suffix)
+            label_path = label_path.with_suffix('.txt')
+            is_segmentation = self.config.annotation_type == "instance_segmentation"
+            self._save_labels(labels, label_path, is_segmentation)
+
     def _save_tile(self,
                    tile_data: np.ndarray, 
                    original_path: Path, 
@@ -350,25 +396,8 @@ class YoloTiler:
             labels: List of labels for the tile
             folder: Subfolder name (train, valid, test)
         """
-        # Set the save directory
-        save_dir = self.target / folder
-
-        # Save the image
-        image_path = save_dir / "images" / original_path.name.replace(self.config.ext, suffix)
-        Image.fromarray(tile_data).save(image_path)
-
-        if labels:
-            # Save the labels in the appropriate directory
-            label_path = save_dir / "labels" / original_path.name.replace(self.config.ext, suffix)
-            label_path = label_path.with_suffix('.txt')
-            is_segmentation = self.config.annotation_type == "instance_segmentation"
-            if is_segmentation:
-                with open(label_path, 'w') as f:
-                    for label_class, points in labels:
-                        f.write(f"{label_class} {points.replace(',', ' ')}\n")
-            else:
-                df = pd.DataFrame(labels, columns=['class', 'x1', 'y1', 'w', 'h'])
-                df.to_csv(label_path, sep=' ', index=False, header=False, float_format='%.6f')
+        self._save_tile_image(tile_data, original_path, suffix, folder)
+        self._save_tile_labels(labels, original_path, suffix, folder)
 
     def _save_tile_image(self, tile_array: np.ndarray, original_path: Path, i: int, j: int) -> None:
         """
@@ -430,52 +459,68 @@ class YoloTiler:
         image_path.rename(target_image)
         label_path.rename(target_label)
 
+    def _validate_directories(self) -> None:
+        """Validate source and target directories."""
+        self._validate_yolo_structure(self.source)
+        self._create_target_folder(self.target)
+
+    def _process_subfolder(self, subfolder: str) -> None:
+        """Process images and labels in a subfolder."""
+        image_paths = list((self.source / subfolder / 'images').glob(f'*{self.config.ext}'))
+        label_paths = list((self.source / subfolder / 'labels').glob('*.txt'))
+            
+        # Log the number of images, labels found
+        self.logger.info(f'Found {len(image_paths)} images in {subfolder} directory')
+        self.logger.info(f'Found {len(label_paths)} label files in {subfolder} directory')
+
+        # Check for missing files
+        if not image_paths:
+            self.logger.warning(f"No images found in {subfolder} directory, skipping")
+            return
+        if len(image_paths) != len(label_paths):
+            self.logger.error(f"Number of images and labels do not match in {subfolder} directory, skipping")
+            return
+
+        # Process each image
+        for image_path, label_path in tqdm(list(zip(image_paths, label_paths))):
+            assert image_path.stem == label_path.stem, "Image and label filenames do not match"
+            self.logger.info(f'Processing {image_path}')
+            self.tile_image(image_path, label_path, subfolder)
+
+    def _check_and_split_data(self) -> None:
+        """Check if valid or test folders are empty and split data if necessary."""
+        valid_images = list((self.target / 'valid' / 'images').glob(f'*{self.config.ext}'))
+        test_images = list((self.target / 'test' / 'images').glob(f'*{self.config.ext}'))
+
+        if not valid_images or not test_images:
+            self.split_data()
+            self.logger.info('Split train data into valid and test sets')
+
+    def _copy_data_yaml(self) -> None:
+        """Copy data.yaml from source to target directory if it exists."""
+        data_yaml = self.source / 'data.yaml'
+        if data_yaml.exists():
+            copyfile(data_yaml, self.target / 'data.yaml')
+        else:
+            self.logger.warning('data.yaml not found in source directory')
+
     def run(self) -> None:
         """Run the complete tiling process"""
         try:
             # Validate directories
-            self._validate_yolo_structure(self.source)
-            self._create_target_folder(self.target)
+            self._validate_directories()
 
             # Train, valid, test subfolders
             for subfolder in self.subfolders:
-                image_paths = list((self.source / subfolder / 'images').glob(f'*{self.config.ext}'))
-                label_paths = list((self.source / subfolder / 'labels').glob('*.txt'))
-                    
-                # Log the number of images, labels found
-                self.logger.info(f'Found {len(image_paths)} images in {subfolder} directory')
-                self.logger.info(f'Found {len(label_paths)} label files in {subfolder} directory')
-
-                # Check for missing files
-                if not image_paths:
-                    self.logger.warning(f"No images found in {subfolder} directory, skipping")
-                    continue
-                if len(image_paths) != len(label_paths):
-                    self.logger.error(f"Number of images and labels do not match in {subfolder} directory, skipping")
-                    continue
-
-                # Process each image
-                for image_path, label_path in tqdm(list(zip(image_paths, label_paths))):
-                    assert image_path.stem == label_path.stem, "Image and label filenames do not match"
-                    self.logger.info(f'Processing {image_path}')
-                    self.tile_image(image_path, label_path, subfolder)
+                self._process_subfolder(subfolder)
 
             self.logger.info('Tiling process completed successfully')
             
             # Check if valid or test folders are empty
-            valid_images = list((self.target / 'valid' / 'images').glob(f'*{self.config.ext}'))
-            test_images = list((self.target / 'test' / 'images').glob(f'*{self.config.ext}'))
-
-            if not valid_images or not test_images:
-                self.split_data()
-                self.logger.info('Split train data into valid and test sets')
+            self._check_and_split_data()
             
             # Copy data.yaml
-            data_yaml = self.source / 'data.yaml'
-            if data_yaml.exists():
-                copyfile(data_yaml, self.target / 'data.yaml')
-            else:
-                self.logger.warning('data.yaml not found in source directory')
+            self._copy_data_yaml()
 
         except Exception as e:
             self.logger.error(f'Error during tiling process: {str(e)}')
