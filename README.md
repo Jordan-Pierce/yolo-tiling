@@ -24,7 +24,7 @@ dst = "path/to/tiled_dataset"
 
 config = TileConfig(
     slice_wh=(640, 480),  # Slice width and height
-    overlap_wh=(64, 48),  # Overlap width and height (10% overlap in this example)
+    overlap_wh=(0.1, 0.1),  # Overlap width and height (10% overlap in this example)
     ext=".png",
     annotation_type="instance_segmentation",
     train_ratio=0.7,
@@ -58,7 +58,7 @@ python src/yolo_tiler.py path/to/dataset path/to/tiled_dataset
 
 2. Custom slice size and overlap:
 ```bash
-python src/yolo_tiler.py path/to/dataset path/to/tiled_dataset --slice_wh 640 480 --overlap_wh 64 48
+python src/yolo_tiler.py path/to/dataset path/to/tiled_dataset --slice_wh 640 480 --overlap_wh 0.1 0.1
 ```
 
 3. Custom annotation type and image extension:

@@ -5,7 +5,7 @@ dst = "C:/Users/jordan.pierce/Downloads/TagLab/sampleProjects/data/segmentation_
 
 config = TileConfig(
     slice_wh=(640, 480),  # Slice width and height
-    overlap_wh=(64, 48),  # Overlap width and height (10% overlap in this example)
+    overlap_wh=(0.1, 0.1),  # Overlap width and height (10% overlap in this example)
     ext=".png",
     annotation_type="instance_segmentation",
     train_ratio=0.7,

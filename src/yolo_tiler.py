@@ -20,7 +20,7 @@ class TileConfig:
     # (width, height) of each slice
     slice_wh: Tuple[int, int]  
     # (width, height) overlap between slices
-    overlap_wh: Tuple[int, int]
+    overlap_wh: Tuple[Union[int, float], Union[int, float]]
     # image extension
     ext: str  
     # type of annotation
@@ -38,10 +38,10 @@ class TileConfig:
         """Validate configuration parameters"""
         if not all(x > 0 for x in self.slice_wh):
             raise ValueError("Slice dimensions must be positive")
-        if not all(x >= 0 for x in self.overlap_wh):
-            raise ValueError("Overlap must be non-negative")
-        if not all(o < s for o, s in zip(self.overlap_wh, self.slice_wh)):
-            raise ValueError("Overlap must be less than slice size")
+        if not all(isinstance(x, (int, float)) and x >= 0 for x in self.overlap_wh):
+            raise ValueError("Overlap must be non-negative and either an integer or a float between 0 and 1")
+        if not all((isinstance(o, int) and o < s) or (isinstance(o, float) and 0 <= o < 1) for o, s in zip(self.overlap_wh, self.slice_wh)):
+            raise ValueError("Overlap must be less than slice size if integer, or between 0 and 1 if float")
         if self.densify_factor <= 0 or self.densify_factor >= 1:
             raise ValueError("Densify factor must be between 0 and 1")
         if self.smoothing_tolerance <= 0 or self.smoothing_tolerance >= 1:
@@ -109,8 +109,10 @@ class YoloTiler:
             if not (folder / subfolder / 'labels').exists():
                 raise ValueError(f"Required folder {folder / subfolder / 'labels'} does not exist")
 
-    def _calculate_step_size(self, slice_size: int, overlap: int) -> int:
+    def _calculate_step_size(self, slice_size: int, overlap: Union[int, float]) -> int:
         """Calculate effective step size for tiling."""
+        if isinstance(overlap, float):
+            overlap = int(slice_size * overlap)
         return slice_size - overlap
 
     def _calculate_num_tiles(self, img_size: int, step_size: int) -> int:
@@ -519,7 +521,7 @@ def parse_args():
     parser.add_argument("source", type=str, help="Source directory containing YOLO dataset")
     parser.add_argument("target", type=str, help="Target directory for sliced dataset")
     parser.add_argument("--slice_wh", type=int, nargs=2, default=(640, 480), help="Slice width and height")
-    parser.add_argument("--overlap_wh", type=int, nargs=2, default=(64, 48), help="Overlap width and height")
+    parser.add_argument("--overlap_wh", type=float, nargs=2, default=(0.1, 0.1), help="Overlap width and height")
     parser.add_argument("--ext", type=str, default=".png", help="Image extension")
     parser.add_argument("--annotation_type", type=str, default="object_detection", help="Type of annotation")
     parser.add_argument("--densify_factor", type=float, default=0.01, help="Densify factor for segmentation")
