@@ -1,7 +1,7 @@
 from yolo_tiler import YoloTiler, TileConfig
 
-src = "C:/Users/jordan.pierce/Downloads/TagLab/sampleProjects/data/segmentation"
-dst = "C:/Users/jordan.pierce/Downloads/TagLab/sampleProjects/data/segmentation_tiled"
+src = "./tests/segmentation"
+dst = "./tests/segmentation_tiled"
 
 config = TileConfig(
     slice_wh=(640, 480),  # Slice width and height

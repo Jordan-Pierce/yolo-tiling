@@ -25,5 +25,6 @@ setup(
         "pandas",
         "Pillow",
         "Shapely",
+        "rasterio",
     ],
 )

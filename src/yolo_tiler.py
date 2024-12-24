@@ -1,5 +1,8 @@
+import warnings
+import argparse
 import logging
 import math
+import random
 from dataclasses import dataclass
 from pathlib import Path
 from shutil import copyfile
@@ -7,11 +10,16 @@ from typing import List, Tuple, Optional, Union, Generator
 
 import numpy as np
 import pandas as pd
-from PIL import Image
+import rasterio
+from rasterio.windows import Window
 from shapely.geometry import Polygon, MultiPolygon
-from tqdm import tqdm
-import random
-import argparse
+
+warnings.filterwarnings("ignore", category=rasterio.errors.NotGeoreferencedWarning)
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Classes
+# ----------------------------------------------------------------------------------------------------------------------
 
 
 @dataclass
@@ -314,73 +322,77 @@ class YoloTiler:
             folder: Subfolder name (train, valid, test)
         """
         # Read image and labels
-        image = Image.open(image_path)
-        image_array = np.array(image, dtype=np.uint8)
-        width, height = image.size
+        with rasterio.open(image_path) as src:
+            width, height = src.width, src.height
 
-        # Get effective area
-        x_min, y_min, x_max, y_max = self.config.get_effective_area(width, height)
-        effective_width = x_max - x_min
-        effective_height = y_max - y_min
+            # Get effective area
+            x_min, y_min, x_max, y_max = self.config.get_effective_area(width, height)
+            effective_width = x_max - x_min
+            effective_height = y_max - y_min
 
-        # Process annotations
-        boxes = []
-        with open(label_path) as f:
-            for line in f:
-                parts = line.strip().split()
-                class_id = int(parts[0])
-                
-                if self.config.annotation_type == "object_detection":
-                    # Parse fixed format: class x y w h
-                    x_center = float(parts[1]) * width
-                    y_center = float(parts[2]) * height
-                    box_w = float(parts[3]) * width
-                    box_h = float(parts[4]) * height
-                    
-                    x1 = x_center - box_w / 2
-                    y1 = y_center - box_h / 2
-                    x2 = x_center + box_w / 2
-                    y2 = y_center + box_h / 2
-                    boxes.append((class_id, Polygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])))
-                else:
-                    # Parse variable length format: class x1 y1 x2 y2 ...
-                    points = []
-                    for i in range(1, len(parts), 2):
-                        x = float(parts[i]) * width
-                        y = float(parts[i + 1]) * height
-                        points.append((x, y))
-                    boxes.append((class_id, Polygon(points)))
-
-        # Process each tile
-        for tile_idx, (x1, y1, x2, y2) in tqdm(enumerate(self._calculate_tile_positions((effective_width, effective_height)))):
-            tile_data = image_array[y1 + y_min:y2 + y_min, x1 + x_min:x2 + x_min]
-            tile_polygon = Polygon([(x1 + x_min, y1 + y_min), (x2 + x_min, y1 + y_min), (x2 + x_min, y2 + y_min), (x1 + x_min, y2 + y_min)])
-            tile_labels = []
-
-            # Process annotations for this tile
-            for box_class, box_polygon in boxes:
-                if tile_polygon.intersects(box_polygon):
-                    intersection = tile_polygon.intersection(box_polygon)
+            # Process annotations
+            boxes = []
+            with open(label_path) as f:
+                for line in f:
+                    parts = line.strip().split()
+                    class_id = int(parts[0])
                     
                     if self.config.annotation_type == "object_detection":
-                        # Handle object detection
-                        bbox = intersection.envelope
-                        center = bbox.centroid
-                        bbox_coords = bbox.exterior.coords.xy
-                        new_width = (max(bbox_coords[0]) - min(bbox_coords[0])) / (x2 - x1)
-                        new_height = (max(bbox_coords[1]) - min(bbox_coords[1])) / (y2 - y1)
-                        new_x = (center.x - x1) / (x2 - x1)
-                        new_y = (center.y - y1) / (y2 - y1)
-                        tile_labels.append([box_class, new_x, new_y, new_width, new_height])
+                        # Parse fixed format: class x y w h
+                        x_center = float(parts[1]) * width
+                        y_center = float(parts[2]) * height
+                        box_w = float(parts[3]) * width
+                        box_h = float(parts[4]) * height
+                        
+                        x1 = x_center - box_w / 2
+                        y1 = y_center - box_h / 2
+                        x2 = x_center + box_w / 2
+                        y2 = y_center + box_h / 2
+                        boxes.append((class_id, Polygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])))
                     else:
-                        # Handle instance segmentation with improved processing
-                        coord_lists = self._process_intersection(intersection)
-                        normalized = self._normalize_coordinates(coord_lists, (x1, y1, x2, y2))
-                        tile_labels.append([box_class, normalized])
+                        # Parse variable length format: class x1 y1 x2 y2 ...
+                        points = []
+                        for i in range(1, len(parts), 2):
+                            x = float(parts[i]) * width
+                            y = float(parts[i + 1]) * height
+                            points.append((x, y))
+                        boxes.append((class_id, Polygon(points)))
 
-            # Save tile image and labels
-            tile_suffix = f'_tile_{tile_idx}{self.config.ext}'
-            self._save_tile(tile_data, image_path, tile_suffix, tile_labels, folder)
+            # Process each tile
+            for tile_idx, (x1, y1, x2, y2) in enumerate(self._calculate_tile_positions((effective_width,
+                                                                                        effective_height))):
+                window = Window(x1 + x_min, y1 + y_min, x2 - x1, y2 - y1)
+                tile_data = src.read(window=window)
+                tile_polygon = Polygon([(x1 + x_min, y1 + y_min),
+                                        (x2 + x_min, y1 + y_min),
+                                        (x2 + x_min, y2 + y_min),
+                                        (x1 + x_min, y2 + y_min)])
+                tile_labels = []
+
+                # Process annotations for this tile
+                for box_class, box_polygon in boxes:
+                    if tile_polygon.intersects(box_polygon):
+                        intersection = tile_polygon.intersection(box_polygon)
+                        
+                        if self.config.annotation_type == "object_detection":
+                            # Handle object detection
+                            bbox = intersection.envelope
+                            center = bbox.centroid
+                            bbox_coords = bbox.exterior.coords.xy
+                            new_width = (max(bbox_coords[0]) - min(bbox_coords[0])) / (x2 - x1)
+                            new_height = (max(bbox_coords[1]) - min(bbox_coords[1])) / (y2 - y1)
+                            new_x = (center.x - x1) / (x2 - x1)
+                            new_y = (center.y - y1) / (y2 - y1)
+                            tile_labels.append([box_class, new_x, new_y, new_width, new_height])
+                        else:
+                            # Handle instance segmentation with improved processing
+                            coord_lists = self._process_intersection(intersection)
+                            normalized = self._normalize_coordinates(coord_lists, (x1, y1, x2, y2))
+                            tile_labels.append([box_class, normalized])
+
+                # Save tile image and labels
+                tile_suffix = f'_tile_{tile_idx}{self.config.ext}'
+                self._save_tile(tile_data, image_path, tile_suffix, tile_labels, folder)
 
     def _save_tile_image(self, tile_data: np.ndarray, image_path: Path, suffix: str, folder: str) -> None:
         """
@@ -397,7 +409,16 @@ class YoloTiler:
 
         # Save the image
         image_path = save_dir / "images" / image_path.name.replace(self.config.ext, suffix)
-        Image.fromarray(tile_data).save(image_path)
+        with rasterio.open(
+            image_path,
+            'w',
+            driver='GTiff',
+            height=tile_data.shape[1],
+            width=tile_data.shape[2],
+            count=tile_data.shape[0],
+            dtype=tile_data.dtype
+        ) as dst:
+            dst.write(tile_data)
         self.logger.info(f"Saved tile to {image_path}")
 
     def _save_tile_labels(self, labels: Optional[List], image_path: Path, suffix: str, folder: str) -> None:
@@ -504,7 +525,7 @@ class YoloTiler:
             return
 
         # Process each image
-        for image_path, label_path in tqdm(list(zip(image_paths, label_paths))):
+        for image_path, label_path in list(zip(image_paths, label_paths)):
             assert image_path.stem == label_path.stem, "Image and label filenames do not match"
             self.logger.info(f'Processing {image_path}')
             self.tile_image(image_path, label_path, subfolder)
@@ -552,17 +573,40 @@ class YoloTiler:
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Tile YOLO dataset images and annotations.")
-    parser.add_argument("source", type=str, help="Source directory containing YOLO dataset")
-    parser.add_argument("target", type=str, help="Target directory for sliced dataset")
-    parser.add_argument("--slice_wh", type=int, nargs=2, default=(640, 480), help="Slice width and height")
-    parser.add_argument("--overlap_wh", type=float, nargs=2, default=(0.1, 0.1), help="Overlap width and height")
-    parser.add_argument("--ext", type=str, default=".png", help="Image extension")
-    parser.add_argument("--annotation_type", type=str, default="object_detection", help="Type of annotation")
-    parser.add_argument("--densify_factor", type=float, default=0.01, help="Densify factor for segmentation")
-    parser.add_argument("--smoothing_tolerance", type=float, default=0.99, help="Smoothing tolerance for segmentation")
-    parser.add_argument("--train_ratio", type=float, default=0.7, help="Train split ratio")
-    parser.add_argument("--valid_ratio", type=float, default=0.2, help="Validation split ratio")
-    parser.add_argument("--test_ratio", type=float, default=0.1, help="Test split ratio")
+
+    parser.add_argument("source", type=str,
+                        help="Source directory containing YOLO dataset")
+
+    parser.add_argument("target", type=str,
+                        help="Target directory for sliced dataset")
+
+    parser.add_argument("--slice_wh", type=int, nargs=2, default=(640, 480),
+                        help="Slice width and height")
+
+    parser.add_argument("--overlap_wh", type=float, nargs=2, default=(0.1, 0.1),
+                        help="Overlap width and height")
+
+    parser.add_argument("--ext", type=str, default=".png",
+                        help="Image extension")
+
+    parser.add_argument("--annotation_type", type=str, default="object_detection",
+                        help="Type of annotation")
+
+    parser.add_argument("--densify_factor", type=float, default=0.01,
+                        help="Densify factor for segmentation")
+
+    parser.add_argument("--smoothing_tolerance", type=float, default=0.99,
+                        help="Smoothing tolerance for segmentation")
+
+    parser.add_argument("--train_ratio", type=float, default=0.7,
+                        help="Train split ratio")
+
+    parser.add_argument("--valid_ratio", type=float, default=0.2,
+                        help="Validation split ratio")
+
+    parser.add_argument("--test_ratio", type=float, default=0.1,
+                        help="Test split ratio")
+
     return parser.parse_args()
 
 
