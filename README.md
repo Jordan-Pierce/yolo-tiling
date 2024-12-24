@@ -94,24 +94,24 @@ dataset/
 You can also use the command line interface to run the tiling process. Here are the instructions:
 
 ```bash
-python src/yolo_tiler.py <source> <target> [--slice_wh SLICE_WH SLICE_WH] [--overlap_wh OVERLAP_WH OVERLAP_WH] [--ext EXT] [--annotation_type ANNOTATION_TYPE] [--densify_factor DENSIFY_FACTOR] [--smoothing_tolerance SMOOTHING_TOLERANCE] [--train_ratio TRAIN_RATIO] [--valid_ratio VALID_RATIO] [--test_ratio TEST_RATIO]
+python src/yolo_tiler.py --source --target [--slice_wh SLICE_WH SLICE_WH] [--overlap_wh OVERLAP_WH OVERLAP_WH] [--ext EXT] [--annotation_type ANNOTATION_TYPE] [--densify_factor DENSIFY_FACTOR] [--smoothing_tolerance SMOOTHING_TOLERANCE] [--train_ratio TRAIN_RATIO] [--valid_ratio VALID_RATIO] [--test_ratio TEST_RATIO]
 ```
 
 ### Example Commands
 
 1. Basic usage with default parameters:
 ```bash
-python src/yolo_tiler.py path/to/dataset path/to/tiled_dataset
+python src/yolo_tiler.py --source tests/detection --target tests/detection_tiled
 ```
 
 2. Custom slice size and overlap:
 ```bash
-python src/yolo_tiler.py path/to/dataset path/to/tiled_dataset --slice_wh 640 480 --overlap_wh 0.1 0.1
+python src/yolo_tiler.py --source tests/detection --target tests/detection_tiled --slice_wh 640 480 --overlap_wh 0.1 0.1
 ```
 
 3. Custom annotation type and image extension:
 ```bash
-python src/yolo_tiler.py path/to/dataset path/to/tiled_dataset --annotation_type instance_segmentation --ext .jpg
+python src/yolo_tiler.py --source tests/segmentation --target tests/segmentation_tiled --annotation_type instance_segmentation --ext .jpg
 ```
 
 ### Memory Efficiency

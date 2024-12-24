@@ -574,10 +574,10 @@ def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Tile YOLO dataset images and annotations.")
 
-    parser.add_argument("source", type=str,
+    parser.add_argument("--source", type=str,
                         help="Source directory containing YOLO dataset")
 
-    parser.add_argument("target", type=str,
+    parser.add_argument("--target", type=str,
                         help="Target directory for sliced dataset")
 
     parser.add_argument("--slice_wh", type=int, nargs=2, default=(640, 480),
