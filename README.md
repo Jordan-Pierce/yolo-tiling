@@ -1,10 +1,9 @@
-# YOLO Dataset tiling 
+# YOLO Dataset tiling
 
 ## Tile (slice) YOLO Dataset for Small Objects Detection and Instance Segmentation
 
-This module can cut images and corresponding labels from YOLO dataset into tiles of specified size and create a 
-new dataset based on these tiles. It supports both object detection and instance segmentation. More details you can find 
-in the <a href="https://supervision.roboflow.com/develop/detection/tools/inference_slicer/#supervision.detection.tools.inference_slicer.InferenceSlicer">docs</a>.
+This module can cut images and corresponding labels from YOLO dataset into tiles of specified size and create a
+new dataset based on these tiles. It supports both object detection and instance segmentation.
 
 ## Installation
 
@@ -30,7 +29,7 @@ config = TileConfig(
 
     # Overlap between adjacent tiles. Can be:
     # - Single float (0-1) for uniform overlap percentage: overlap_wh=0.1
-    # - Tuple of floats for different overlap in each dimension: overlap_wh=(0.1, 0.1) 
+    # - Tuple of floats for different overlap in each dimension: overlap_wh=(0.1, 0.1)
     # - Single integer for pixel overlap: overlap_wh=64
     # - Tuple of integers for different pixel overlaps: overlap_wh=(64, 48)
     overlap_wh=(0.1, 0.1),

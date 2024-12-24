@@ -1,3 +1,7 @@
+#!/usr/bin/env python
+
+"""Tests for `yolo_tiler` package."""
+
 from yolo_tiler import YoloTiler, TileConfig
 
 src = "./tests/segmentation"

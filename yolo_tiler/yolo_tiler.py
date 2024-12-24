@@ -1,5 +1,4 @@
 import warnings
-import argparse
 import logging
 import math
 import random
@@ -49,13 +48,13 @@ class TileConfig:
         self.train_ratio = train_ratio
         self.valid_ratio = valid_ratio
         self.test_ratio = test_ratio
-        
+
         # Handle margins
         if isinstance(margins, (int, float)):
             self.margins = (margins, margins, margins, margins)
         else:
             self.margins = margins
-        
+
         self._validate()
 
     def _validate(self):
@@ -72,7 +71,7 @@ class TileConfig:
     def get_effective_area(self, image_width: int, image_height: int) -> Tuple[int, int, int, int]:
         """Calculate the effective area after applying margins"""
         left, top, right, bottom = self.margins
-        
+
         if isinstance(left, float):
             x_min = int(image_width * left)
             y_min = int(image_height * top)
@@ -83,9 +82,9 @@ class TileConfig:
             y_min = top
             x_max = image_width - right
             y_max = image_height - bottom
-            
+
         return x_min, y_min, x_max, y_max
-    
+
 
 class YoloTiler:
     """
@@ -93,8 +92,8 @@ class YoloTiler:
     Supports both object detection and instance segmentation formats.
     """
 
-    def __init__(self, 
-                 source: Union[str, Path], 
+    def __init__(self,
+                 source: Union[str, Path],
                  target: Union[str, Path],
                  config: TileConfig):
         """
@@ -109,9 +108,9 @@ class YoloTiler:
         self.target = Path(target)
         self.config = config
         self.logger = self._setup_logger()
-        
-        self.subfolders = ['train/', 
-                           'valid/', 
+
+        self.subfolders = ['train/',
+                           'valid/',
                            'test/']
 
     def _setup_logger(self) -> logging.Logger:
@@ -123,13 +122,13 @@ class YoloTiler:
         handler.setFormatter(formatter)
         logger.addHandler(handler)
         return logger
-    
+
     def _create_target_folder(self, target: Path) -> None:
         """Create target folder if it does not exist"""
         for subfolder in self.subfolders:
             (target / subfolder / "images").mkdir(parents=True, exist_ok=True)
             (target / subfolder / "labels").mkdir(parents=True, exist_ok=True)
-        
+
     def _validate_yolo_structure(self, folder: Path) -> None:
         """
         Validate YOLO dataset folder structure.
@@ -160,14 +159,14 @@ class YoloTiler:
         """Generate tile positions using numpy for faster calculations."""
         return np.arange(0, img_size, step_size)
 
-    def _calculate_tile_positions(self, 
+    def _calculate_tile_positions(self,
                                   image_size: Tuple[int, int]) -> Generator[Tuple[int, int, int, int], None, None]:
         """
         Calculate tile positions with overlap.
-        
+
         Args:
             image_size: (width, height) of the image
-            
+
         Yields:
             Tuples of (x1, y1, x2, y2) for each tile
         """
@@ -209,7 +208,7 @@ class YoloTiler:
             dy = p2[1] - p1[1]
             segment_length = math.sqrt(dx * dx + dy * dy)
             steps = int(segment_length / factor)
-            
+
             if steps > 1:
                 for step in range(steps):
                     t = step / steps
@@ -218,7 +217,7 @@ class YoloTiler:
                     result.append((x, y))
             else:
                 result.append(p1)
-                
+
         result.append(coords[-1])
         return result
 
@@ -226,17 +225,17 @@ class YoloTiler:
         # Calculate densification distance based on polygon size
         perimeter = poly.length
         dense_distance = perimeter * self.config.densify_factor
-        
+
         # Process exterior ring
         coords = list(poly.exterior.coords)[:-1]
         dense_coords = self._densify_line(coords, dense_distance)
-        
+
         # Create simplified version for smoothing
         dense_poly = Polygon(dense_coords)
         smoothed = dense_poly.simplify(self.config.smoothing_tolerance, preserve_topology=True)
-        
+
         result = [list(smoothed.exterior.coords)[:-1]]
-        
+
         # Process interior rings (holes)
         for interior in poly.interiors:
             coords = list(interior.coords)[:-1]
@@ -244,16 +243,16 @@ class YoloTiler:
             hole_poly = Polygon(dense_coords)
             smoothed_hole = hole_poly.simplify(self.config.smoothing_tolerance, preserve_topology=True)
             result.append(list(smoothed_hole.exterior.coords)[:-1])
-            
+
         return result
 
     def _process_intersection(self, intersection: Union[Polygon, MultiPolygon]) -> List[List[Tuple[float, float]]]:
         """
         Process intersection geometry with improved quality.
-        
+
         Args:
             intersection: Shapely geometry object
-            
+
         Returns:
             List of coordinate lists (exterior + holes)
         """
@@ -266,23 +265,23 @@ class YoloTiler:
                 all_coords.extend(self._process_polygon(poly))
             return all_coords
 
-    def _normalize_coordinates(self, 
-                               coord_lists: List[List[Tuple[float, float]]], 
+    def _normalize_coordinates(self,
+                               coord_lists: List[List[Tuple[float, float]]],
                                tile_bounds: Tuple[int, int, int, int]) -> str:
         """
         Normalize coordinates to [0,1] range relative to tile bounds.
-        
+
         Args:
             coord_lists: List of coordinate lists (exterior + holes)
             tile_bounds: (x1, y1, x2, y2) of tile bounds
-            
+
         Returns:
             Space-separated string of normalized coordinates
         """
         x1, y1, x2, y2 = tile_bounds
         tile_width = x2 - x1
         tile_height = y2 - y1
-        
+
         normalized_parts = []
         for coords in coord_lists:
             normalized = []
@@ -291,7 +290,7 @@ class YoloTiler:
                 norm_y = (y - y1) / tile_height
                 normalized.append(f"{norm_x:.6f} {norm_y:.6f}")
             normalized_parts.append(normalized)
-        
+
         # Join all parts with special separator
         return " ".join([" ".join(part) for part in normalized_parts])
 
@@ -336,14 +335,14 @@ class YoloTiler:
                 for line in f:
                     parts = line.strip().split()
                     class_id = int(parts[0])
-                    
+
                     if self.config.annotation_type == "object_detection":
                         # Parse fixed format: class x y w h
                         x_center = float(parts[1]) * width
                         y_center = float(parts[2]) * height
                         box_w = float(parts[3]) * width
                         box_h = float(parts[4]) * height
-                        
+
                         x1 = x_center - box_w / 2
                         y1 = y_center - box_h / 2
                         x2 = x_center + box_w / 2
@@ -373,7 +372,7 @@ class YoloTiler:
                 for box_class, box_polygon in boxes:
                     if tile_polygon.intersects(box_polygon):
                         intersection = tile_polygon.intersection(box_polygon)
-                        
+
                         if self.config.annotation_type == "object_detection":
                             # Handle object detection
                             bbox = intersection.envelope
@@ -439,14 +438,14 @@ class YoloTiler:
             self._save_labels(labels, label_path, is_segmentation)
 
     def _save_tile(self,
-                   tile_data: np.ndarray, 
-                   original_path: Path, 
-                   suffix: str, 
+                   tile_data: np.ndarray,
+                   original_path: Path,
+                   suffix: str,
                    labels: Optional[List],
                    folder: str) -> None:
         """
         Save a tile image and its labels.
-        
+
         Args:
             tile_data: Numpy array of tile image
             original_path: Path to original image
@@ -511,7 +510,7 @@ class YoloTiler:
         """Process images and labels in a subfolder."""
         image_paths = list((self.source / subfolder / 'images').glob(f'*{self.config.ext}'))
         label_paths = list((self.source / subfolder / 'labels').glob('*.txt'))
-            
+
         # Log the number of images, labels found
         self.logger.info(f'Found {len(image_paths)} images in {subfolder} directory')
         self.logger.info(f'Found {len(label_paths)} label files in {subfolder} directory')
@@ -558,79 +557,13 @@ class YoloTiler:
                 self._process_subfolder(subfolder)
 
             self.logger.info('Tiling process completed successfully')
-            
+
             # Check if valid or test folders are empty
             self._check_and_split_data()
-            
+
             # Copy data.yaml
             self._copy_data_yaml()
 
         except Exception as e:
             self.logger.error(f'Error during tiling process: {str(e)}')
             raise
-
-
-def parse_args():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Tile YOLO dataset images and annotations.")
-
-    parser.add_argument("--source", type=str,
-                        help="Source directory containing YOLO dataset")
-
-    parser.add_argument("--target", type=str,
-                        help="Target directory for sliced dataset")
-
-    parser.add_argument("--slice_wh", type=int, nargs=2, default=(640, 480),
-                        help="Slice width and height")
-
-    parser.add_argument("--overlap_wh", type=float, nargs=2, default=(0.1, 0.1),
-                        help="Overlap width and height")
-
-    parser.add_argument("--ext", type=str, default=".png",
-                        help="Image extension")
-
-    parser.add_argument("--annotation_type", type=str, default="object_detection",
-                        help="Type of annotation")
-
-    parser.add_argument("--densify_factor", type=float, default=0.01,
-                        help="Densify factor for segmentation")
-
-    parser.add_argument("--smoothing_tolerance", type=float, default=0.99,
-                        help="Smoothing tolerance for segmentation")
-
-    parser.add_argument("--train_ratio", type=float, default=0.7,
-                        help="Train split ratio")
-
-    parser.add_argument("--valid_ratio", type=float, default=0.2,
-                        help="Validation split ratio")
-
-    parser.add_argument("--test_ratio", type=float, default=0.1,
-                        help="Test split ratio")
-
-    return parser.parse_args()
-
-
-def main():
-    """Main function to run the tiling process based on command line arguments."""
-    args = parse_args()
-    config = TileConfig(
-        slice_wh=tuple(args.slice_wh),
-        overlap_wh=tuple(args.overlap_wh),
-        ext=args.ext,
-        annotation_type=args.annotation_type,
-        densify_factor=args.densify_factor,
-        smoothing_tolerance=args.smoothing_tolerance,
-        train_ratio=args.train_ratio,
-        valid_ratio=args.valid_ratio,
-        test_ratio=args.test_ratio
-    )
-    tiler = YoloTiler(
-        source=args.source,
-        target=args.target,
-        config=config,
-    )
-    tiler.run()
-
-
-if __name__ == "__main__":
-    main()

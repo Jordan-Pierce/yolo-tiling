@@ -1,0 +1,9 @@
+names:
+- Montipora_plate/flabellata
+- Pocillopora
+- Porite_massive
+- Montipora_crust/patula
+nc: 4
+test: ../test/images
+train: ../train/images
+val: ../valid/images
