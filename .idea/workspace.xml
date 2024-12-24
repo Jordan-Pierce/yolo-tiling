@@ -6,10 +6,205 @@
   <component name="ChangeListManager">
     <list default="true" id="0fe08a4d-5c50-4aaa-a4c1-cac7b65f7a2b" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/__init__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/yolo_tiler.py" beforeDir="false" afterPath="$PROJECT_DIR$/yolo_tiler/yolo_tiler.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/setup.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/data.yaml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/test/images/VOS_RGB_tile_12.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/test/images/VOS_RGB_tile_15.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/test/images/VOS_RGB_tile_17.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/test/images/VOS_RGB_tile_30.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/test/images/VOS_RGB_tile_45.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/test/images/VOS_RGB_tile_5.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/test/labels/VOS_RGB_tile_12.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/test/labels/VOS_RGB_tile_15.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/test/labels/VOS_RGB_tile_17.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/test/labels/VOS_RGB_tile_30.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/test/labels/VOS_RGB_tile_45.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/test/labels/VOS_RGB_tile_5.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_1.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_10.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_11.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_13.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_14.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_16.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_18.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_19.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_2.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_21.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_22.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_23.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_24.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_26.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_27.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_28.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_3.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_31.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_32.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_33.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_34.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_35.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_38.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_39.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_4.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_40.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_41.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_43.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_44.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_46.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_47.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_8.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/images/VOS_RGB_tile_9.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_1.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_10.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_11.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_13.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_14.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_16.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_18.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_19.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_2.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_21.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_22.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_23.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_24.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_26.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_27.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_28.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_3.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_31.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_32.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_33.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_34.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_35.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_38.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_39.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_4.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_40.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_41.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_43.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_44.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_46.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_47.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_8.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/train/labels/VOS_RGB_tile_9.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/valid/images/VOS_RGB_tile_0.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/valid/images/VOS_RGB_tile_20.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/valid/images/VOS_RGB_tile_25.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/valid/images/VOS_RGB_tile_29.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/valid/images/VOS_RGB_tile_36.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/valid/images/VOS_RGB_tile_37.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/valid/images/VOS_RGB_tile_42.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/valid/images/VOS_RGB_tile_6.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/valid/images/VOS_RGB_tile_7.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/valid/labels/VOS_RGB_tile_0.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/valid/labels/VOS_RGB_tile_20.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/valid/labels/VOS_RGB_tile_25.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/valid/labels/VOS_RGB_tile_29.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/valid/labels/VOS_RGB_tile_36.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/valid/labels/VOS_RGB_tile_37.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/valid/labels/VOS_RGB_tile_42.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/valid/labels/VOS_RGB_tile_6.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/detection_tiled/valid/labels/VOS_RGB_tile_7.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/data.yaml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/test/images/VOS_RGB_tile_13.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/test/images/VOS_RGB_tile_21.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/test/images/VOS_RGB_tile_23.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/test/images/VOS_RGB_tile_32.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/test/images/VOS_RGB_tile_43.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/test/images/VOS_RGB_tile_9.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/test/labels/VOS_RGB_tile_13.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/test/labels/VOS_RGB_tile_21.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/test/labels/VOS_RGB_tile_23.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/test/labels/VOS_RGB_tile_32.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/test/labels/VOS_RGB_tile_43.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/test/labels/VOS_RGB_tile_9.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_0.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_10.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_11.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_12.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_14.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_15.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_16.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_17.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_18.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_2.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_22.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_24.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_25.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_27.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_3.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_30.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_31.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_33.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_34.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_35.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_36.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_37.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_38.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_4.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_40.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_41.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_45.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_46.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_47.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_5.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_6.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_7.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/images/VOS_RGB_tile_8.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_0.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_10.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_11.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_12.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_14.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_15.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_16.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_17.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_18.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_2.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_22.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_24.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_25.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_27.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_3.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_30.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_31.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_33.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_34.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_35.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_36.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_37.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_38.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_4.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_40.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_41.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_45.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_46.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_47.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_5.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_6.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_7.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/train/labels/VOS_RGB_tile_8.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/valid/images/VOS_RGB_tile_1.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/valid/images/VOS_RGB_tile_19.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/valid/images/VOS_RGB_tile_20.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/valid/images/VOS_RGB_tile_26.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/valid/images/VOS_RGB_tile_28.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/valid/images/VOS_RGB_tile_29.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/valid/images/VOS_RGB_tile_39.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/valid/images/VOS_RGB_tile_42.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/valid/images/VOS_RGB_tile_44.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/valid/labels/VOS_RGB_tile_1.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/valid/labels/VOS_RGB_tile_19.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/valid/labels/VOS_RGB_tile_20.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/valid/labels/VOS_RGB_tile_26.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/valid/labels/VOS_RGB_tile_28.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/valid/labels/VOS_RGB_tile_29.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/valid/labels/VOS_RGB_tile_39.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/valid/labels/VOS_RGB_tile_42.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/segmentation_tiled/valid/labels/VOS_RGB_tile_44.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_yolo_tiler.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_yolo_tiler.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/yolo_tiler/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/yolo_tiler/__init__.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -30,9 +225,9 @@
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
     "Python.test.executor": "Debug",
-    "Python.tiler.executor": "Run",
+    "Python.tiler.executor": "Debug",
     "RunOnceActivity.ShowReadmeOnStart": "true",
-    "last_opened_file_path": "C:/Users/jordan.pierce/Documents/GitHub/yolo-tiling/tests/test.py",
+    "last_opened_file_path": "C:/Users/jordan.pierce/Documents/GitHub/yolo-tiling/tests/test_yolo_tiler.py",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
@@ -62,7 +257,7 @@
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/tests/test.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/tests/test_yolo_tiler.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -89,116 +284,15 @@
       <option name="presentableId" value="Default" />
       <updated>1734716662989</updated>
       <workItem from="1734716664767" duration="14072000" />
-      <workItem from="1734990513799" duration="8724000" />
+      <workItem from="1734990513799" duration="9882000" />
     </task>
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
   </component>
-  <component name="XDebuggerManager">
-    <breakpoint-manager>
-      <breakpoints>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/yolo_tiler/yolo_tiler.py</url>
-          <line>338</line>
-          <option name="timeStamp" value="19" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/yolo_tiler/yolo_tiler.py</url>
-          <line>563</line>
-          <option name="timeStamp" value="36" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/yolo_tiler/yolo_tiler.py</url>
-          <line>464</line>
-          <option name="timeStamp" value="37" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/yolo_tiler/yolo_tiler.py</url>
-          <line>465</line>
-          <option name="timeStamp" value="38" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/yolo_tiler/yolo_tiler.py</url>
-          <line>467</line>
-          <option name="timeStamp" value="39" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/yolo_tiler/yolo_tiler.py</url>
-          <line>471</line>
-          <option name="timeStamp" value="40" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/yolo_tiler/yolo_tiler.py</url>
-          <line>472</line>
-          <option name="timeStamp" value="41" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/yolo_tiler/yolo_tiler.py</url>
-          <line>473</line>
-          <option name="timeStamp" value="42" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/yolo_tiler/yolo_tiler.py</url>
-          <line>562</line>
-          <option name="timeStamp" value="44" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/yolo_tiler/yolo_tiler.py</url>
-          <line>556</line>
-          <option name="timeStamp" value="50" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/yolo_tiler/yolo_tiler.py</url>
-          <line>534</line>
-          <option name="timeStamp" value="51" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/yolo_tiler/yolo_tiler.py</url>
-          <line>535</line>
-          <option name="timeStamp" value="52" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/yolo_tiler/yolo_tiler.py</url>
-          <line>537</line>
-          <option name="timeStamp" value="53" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/yolo_tiler/yolo_tiler.py</url>
-          <line>538</line>
-          <option name="timeStamp" value="54" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/yolo_tiler/yolo_tiler.py</url>
-          <line>468</line>
-          <option name="timeStamp" value="55" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/yolo_tiler/yolo_tiler.py</url>
-          <line>475</line>
-          <option name="timeStamp" value="56" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/yolo_tiler/yolo_tiler.py</url>
-          <line>476</line>
-          <option name="timeStamp" value="57" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/yolo_tiler/yolo_tiler.py</url>
-          <line>478</line>
-          <option name="timeStamp" value="58" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/yolo_tiler/yolo_tiler.py</url>
-          <line>479</line>
-          <option name="timeStamp" value="59" />
-        </line-breakpoint>
-      </breakpoints>
-    </breakpoint-manager>
-  </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/yolo_tiling$test.coverage" NAME="test Coverage Results" MODIFIED="1734990173929" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
-    <SUITE FILE_PATH="coverage/yolo_tiling$tiler.coverage" NAME="tiler Coverage Results" MODIFIED="1735057345778" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
+    <SUITE FILE_PATH="coverage/yolo_tiling$tiler.coverage" NAME="tiler Coverage Results" MODIFIED="1735069541019" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
   </component>
 </project>
