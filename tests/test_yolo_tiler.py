@@ -2,12 +2,12 @@
 
 """Tests for `yolo_tiler` package."""
 
-from yolo_tiler import YoloTiler, TileConfig
+import yolo_tiler
 
 src = "./tests/segmentation"
 dst = "./tests/segmentation_tiled"
 
-config = TileConfig(
+config = yolo_tiler.TileConfig(
     slice_wh=(640, 480),  # Slice width and height
     overlap_wh=(0.1, 0.1),  # Overlap width and height (10% overlap in this example, or 64x48 pixels)
     ext=".png",
@@ -18,7 +18,7 @@ config = TileConfig(
     margins=(10, 10, 10, 10),  # Left, top, right, bottom
 )
 
-tiler = YoloTiler(
+tiler = yolo_tiler.YoloTiler(
     source=src,
     target=dst,
     config=config,

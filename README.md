@@ -96,6 +96,11 @@ You can also use the command line interface to run the tiling process. Here are 
 python src/yolo_tiler.py --source --target [--slice_wh SLICE_WH SLICE_WH] [--overlap_wh OVERLAP_WH OVERLAP_WH] [--ext EXT] [--annotation_type ANNOTATION_TYPE] [--densify_factor DENSIFY_FACTOR] [--smoothing_tolerance SMOOTHING_TOLERANCE] [--train_ratio TRAIN_RATIO] [--valid_ratio VALID_RATIO] [--test_ratio TEST_RATIO]
 ```
 
+### Test Data
+```bash
+python tests/test_yolo_tiler.py
+```
+
 ### Example Commands
 
 1. Basic usage with default parameters:
