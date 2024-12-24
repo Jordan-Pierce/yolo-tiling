@@ -1,9 +1,5 @@
 # YOLO Dataset tiling
 
-This module can cut images and corresponding labels from YOLO dataset into tiles of specified size and create a
-new dataset based on these tiles. It supports both object detection and instance segmentation. Credit for the original
-repository goes to [slanj](https://github.com/slanj/yolo-tiling).
-
 <div align="center">
 
 [![python-version](https://img.shields.io/pypi/pyversions/yolo-tiling.svg)](https://pypi.org/project/yolo-tiling)
@@ -13,6 +9,11 @@ repository goes to [slanj](https://github.com/slanj/yolo-tiling).
 [![macos](https://github.com/Jordan-Pierce/yolo-tiling/actions/workflows/macos.yml/badge.svg)](https://pypi.org/project/yolo-tiling)
 [![ubuntu](https://github.com/Jordan-Pierce/yolo-tiling/actions/workflows/ubuntu.yml/badge.svg)](https://pypi.org/project/yolo-tiling)
 </div>
+
+This module can cut images and corresponding labels from YOLO dataset into tiles of specified size and create a
+new dataset based on these tiles. It supports both object detection and instance segmentation. Credit for the original
+repository goes to [slanj](https://github.com/slanj/yolo-tiling).
+
 
 ## Installation
 
