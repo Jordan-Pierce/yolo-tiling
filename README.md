@@ -1,7 +1,5 @@
 # YOLO Dataset tiling
 
-## Tile (slice) YOLO Dataset for Small Objects Detection and Instance Segmentation
-
 This module can cut images and corresponding labels from YOLO dataset into tiles of specified size and create a
 new dataset based on these tiles. It supports both object detection and instance segmentation. Credit for the original
 repository goes to [slanj](https://github.com/slanj/yolo-tiling).
