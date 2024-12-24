@@ -1,5 +1,8 @@
+import warnings
+import argparse
 import logging
 import math
+import random
 from dataclasses import dataclass
 from pathlib import Path
 from shutil import copyfile
@@ -7,13 +10,16 @@ from typing import List, Tuple, Optional, Union, Generator
 
 import numpy as np
 import pandas as pd
-from PIL import Image
-from shapely.geometry import Polygon, MultiPolygon
-from tqdm import tqdm
-import random
-import argparse
 import rasterio
 from rasterio.windows import Window
+from shapely.geometry import Polygon, MultiPolygon
+
+warnings.filterwarnings("ignore", category=rasterio.errors.NotGeoreferencedWarning)
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Classes
+# ----------------------------------------------------------------------------------------------------------------------
 
 
 @dataclass
@@ -353,10 +359,14 @@ class YoloTiler:
                         boxes.append((class_id, Polygon(points)))
 
             # Process each tile
-            for tile_idx, (x1, y1, x2, y2) in tqdm(enumerate(self._calculate_tile_positions((effective_width, effective_height)))):
+            for tile_idx, (x1, y1, x2, y2) in enumerate(self._calculate_tile_positions((effective_width,
+                                                                                        effective_height))):
                 window = Window(x1 + x_min, y1 + y_min, x2 - x1, y2 - y1)
                 tile_data = src.read(window=window)
-                tile_polygon = Polygon([(x1 + x_min, y1 + y_min), (x2 + x_min, y1 + y_min), (x2 + x_min, y2 + y_min), (x1 + x_min, y2 + y_min)])
+                tile_polygon = Polygon([(x1 + x_min, y1 + y_min),
+                                        (x2 + x_min, y1 + y_min),
+                                        (x2 + x_min, y2 + y_min),
+                                        (x1 + x_min, y2 + y_min)])
                 tile_labels = []
 
                 # Process annotations for this tile
@@ -515,7 +525,7 @@ class YoloTiler:
             return
 
         # Process each image
-        for image_path, label_path in tqdm(list(zip(image_paths, label_paths))):
+        for image_path, label_path in list(zip(image_paths, label_paths)):
             assert image_path.stem == label_path.stem, "Image and label filenames do not match"
             self.logger.info(f'Processing {image_path}')
             self.tile_image(image_path, label_path, subfolder)
@@ -563,17 +573,40 @@ class YoloTiler:
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Tile YOLO dataset images and annotations.")
-    parser.add_argument("source", type=str, help="Source directory containing YOLO dataset")
-    parser.add_argument("target", type=str, help="Target directory for sliced dataset")
-    parser.add_argument("--slice_wh", type=int, nargs=2, default=(640, 480), help="Slice width and height")
-    parser.add_argument("--overlap_wh", type=float, nargs=2, default=(0.1, 0.1), help="Overlap width and height")
-    parser.add_argument("--ext", type=str, default=".png", help="Image extension")
-    parser.add_argument("--annotation_type", type=str, default="object_detection", help="Type of annotation")
-    parser.add_argument("--densify_factor", type=float, default=0.01, help="Densify factor for segmentation")
-    parser.add_argument("--smoothing_tolerance", type=float, default=0.99, help="Smoothing tolerance for segmentation")
-    parser.add_argument("--train_ratio", type=float, default=0.7, help="Train split ratio")
-    parser.add_argument("--valid_ratio", type=float, default=0.2, help="Validation split ratio")
-    parser.add_argument("--test_ratio", type=float, default=0.1, help="Test split ratio")
+
+    parser.add_argument("source", type=str,
+                        help="Source directory containing YOLO dataset")
+
+    parser.add_argument("target", type=str,
+                        help="Target directory for sliced dataset")
+
+    parser.add_argument("--slice_wh", type=int, nargs=2, default=(640, 480),
+                        help="Slice width and height")
+
+    parser.add_argument("--overlap_wh", type=float, nargs=2, default=(0.1, 0.1),
+                        help="Overlap width and height")
+
+    parser.add_argument("--ext", type=str, default=".png",
+                        help="Image extension")
+
+    parser.add_argument("--annotation_type", type=str, default="object_detection",
+                        help="Type of annotation")
+
+    parser.add_argument("--densify_factor", type=float, default=0.01,
+                        help="Densify factor for segmentation")
+
+    parser.add_argument("--smoothing_tolerance", type=float, default=0.99,
+                        help="Smoothing tolerance for segmentation")
+
+    parser.add_argument("--train_ratio", type=float, default=0.7,
+                        help="Train split ratio")
+
+    parser.add_argument("--valid_ratio", type=float, default=0.2,
+                        help="Validation split ratio")
+
+    parser.add_argument("--test_ratio", type=float, default=0.1,
+                        help="Test split ratio")
+
     return parser.parse_args()
 
 

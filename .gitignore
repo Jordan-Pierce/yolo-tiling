@@ -3,3 +3,5 @@ yolosliced/
 __pycache__/
 *.egg-info/
 .idea
+tests/segmentation_tiled
+tests/detection_tiled
