@@ -2,12 +2,18 @@
 
 """Tests for `yolo_tiler` package."""
 
-import yolo_tiler
+from yolo_tiler import YoloTiler, TileConfig, TileProgress
+
+
+def progress_callback(progress: TileProgress):
+    print(f"Processing {progress.current_image} in {progress.current_set} set: "
+          f"tile {progress.current_tile}/{progress.total_tiles}")
+
 
 src = "./tests/segmentation"
 dst = "./tests/segmentation_tiled"
 
-config = yolo_tiler.TileConfig(
+config = TileConfig(
     slice_wh=(640, 480),  # Slice width and height
     overlap_wh=(0.1, 0.1),  # Overlap width and height (10% overlap in this example, or 64x48 pixels)
     ext=".png",
@@ -18,10 +24,14 @@ config = yolo_tiler.TileConfig(
     margins=(10, 10, 10, 10),  # Left, top, right, bottom
 )
 
-tiler = yolo_tiler.YoloTiler(
+
+# Create tiler with callback
+tiler = YoloTiler(
     source=src,
     target=dst,
     config=config,
+    callback=progress_callback
 )
 
+# Run tiling process
 tiler.run()

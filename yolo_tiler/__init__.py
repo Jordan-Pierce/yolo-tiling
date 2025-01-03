@@ -1,6 +1,6 @@
 """Top-level package for yolo-tiling."""
 
-from yolo_tiler.yolo_tiler import YoloTiler, TileConfig
+from yolo_tiler.yolo_tiler import YoloTiler, TileConfig, TileProgress
 
 __version__ = "0.0.3"
 __author__ = "Jordan Pierce"
