@@ -77,6 +77,7 @@ tiler = YoloTiler(
     source=src,
     target=dst,
     config=config,
+    num_viz_samples=15,  # Number of samples to visualize
 )
 
 tiler.run()
