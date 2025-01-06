@@ -520,12 +520,11 @@ class YoloTiler:
             suffix: Suffix for the tile filename
             folder: Subfolder name (train, valid, test)
         """
-        if labels:
-            # Save the labels in the appropriate directory
-            label_path = self.target / folder / "labels" / image_path.name.replace(self.config.ext, suffix)
-            label_path = label_path.with_suffix('.txt')
-            is_segmentation = self.config.annotation_type == "instance_segmentation"
-            self._save_labels(labels, label_path, is_segmentation)
+        # Save the labels in the appropriate directory
+        label_path = self.target / folder / "labels" / image_path.name.replace(self.config.ext, suffix)
+        label_path = label_path.with_suffix('.txt')
+        is_segmentation = self.config.annotation_type == "instance_segmentation"
+        self._save_labels(labels, label_path, is_segmentation)
 
     def _save_tile(self,
                    tile_data: np.ndarray,
@@ -575,7 +574,7 @@ class YoloTiler:
 
             if self.callback:
                 progress = TileProgress(
-                    current_tile=tile_idx+1,
+                    current_tile=tile_idx + 1,
                     total_tiles=num_valid,
                     current_set='valid',
                     current_image=image_path.name
@@ -587,7 +586,7 @@ class YoloTiler:
             self._move_split_data(image_path, label_path, 'test')
             if self.callback:
                 progress = TileProgress(
-                    current_tile=tile_idx+1,
+                    current_tile=tile_idx + 1,
                     total_tiles=num_test,
                     current_set='test',
                     current_image=image_path.name
@@ -685,14 +684,14 @@ class YoloTiler:
 
             if self.callback:
                 progress = TileProgress(
-                    current_tile=tile_idx+1,
+                    current_tile=tile_idx + 1,
                     total_tiles=num_samples,
                     current_set='rendered',
                     current_image=image_path.name
                 )
                 self.callback(progress)
 
-            self._render_single_sample(image_path, label_path, tile_idx+1)
+            self._render_single_sample(image_path, label_path, tile_idx + 1)
 
     def _render_single_sample(self, image_path: Path, label_path: Path, idx: int) -> None:
         """
