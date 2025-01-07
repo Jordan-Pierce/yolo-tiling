@@ -44,8 +44,11 @@ config = TileConfig(
     # - Tuple of integers for different pixel overlaps: overlap_wh=(64, 48)
     overlap_wh=(0.1, 0.1),
 
-    # Image file extension to process
-    ext=".png",
+    # Input image file extension to process
+    input_ext=".png",
+
+    # Output image file extension to save (default: same as input_ext)
+    output_ext=None,
 
     # Type of YOLO annotations to process:
     # - "object_detection": Standard YOLO format (class, x, y, width, height)
@@ -107,7 +110,7 @@ dataset/
 You can also use the command line interface to run the tiling process. Here are the instructions:
 
 ```bash
-python src/yolo_tiler.py --source --target [--slice_wh SLICE_WH SLICE_WH] [--overlap_wh OVERLAP_WH OVERLAP_WH] [--ext EXT] [--annotation_type ANNOTATION_TYPE] [--densify_factor DENSIFY_FACTOR] [--smoothing_tolerance SMOOTHING_TOLERANCE] [--train_ratio TRAIN_RATIO] [--valid_ratio VALID_RATIO] [--test_ratio TEST_RATIO]
+python src/yolo_tiler.py --source --target [--slice_wh SLICE_WH SLICE_WH] [--overlap_wh OVERLAP_WH OVERLAP_WH] [--input_ext INPUT_EXT] [--output_ext OUTPUT_EXT] [--annotation_type ANNOTATION_TYPE] [--densify_factor DENSIFY_FACTOR] [--smoothing_tolerance SMOOTHING_TOLERANCE] [--train_ratio TRAIN_RATIO] [--valid_ratio VALID_RATIO] [--test_ratio TEST_RATIO]
 ```
 
 ### Test Data
@@ -129,7 +132,7 @@ python src/yolo_tiler.py --source tests/detection --target tests/detection_tiled
 
 3. Custom annotation type and image extension:
 ```bash
-python src/yolo_tiler.py --source tests/segmentation --target tests/segmentation_tiled --annotation_type instance_segmentation --ext .jpg
+python src/yolo_tiler.py --source tests/segmentation --target tests/segmentation_tiled --annotation_type instance_segmentation --input_ext .jpg --output_ext .png
 ```
 
 ### Memory Efficiency

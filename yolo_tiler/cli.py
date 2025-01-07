@@ -21,8 +21,11 @@ def main():
     parser.add_argument("--overlap_wh", type=float, nargs=2, default=(0.1, 0.1),
                         help="Overlap width and height")
 
-    parser.add_argument("--ext", type=str, default=".png",
-                        help="Image extension")
+    parser.add_argument("--input_ext", type=str, default=".png",
+                        help="Input image extension")
+
+    parser.add_argument("--output_ext", type=str, default=None,
+                        help="Output image extension (default: same as input_ext)")
 
     parser.add_argument("--annotation_type", type=str, default="object_detection",
                         help="Type of annotation")
@@ -46,7 +49,8 @@ def main():
     config = TileConfig(
         slice_wh=tuple(args.slice_wh),
         overlap_wh=tuple(args.overlap_wh),
-        ext=args.ext,
+        input_ext=args.input_ext,
+        output_ext=args.output_ext,
         annotation_type=args.annotation_type,
         densify_factor=args.densify_factor,
         smoothing_tolerance=args.smoothing_tolerance,
