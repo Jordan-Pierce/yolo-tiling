@@ -70,7 +70,10 @@ config = TileConfig(
     # - Tuple of floats for different margins: margins=(0.1, 0.1, 0.1, 0.1)
     # - Single integer for pixel margins: margins=64
     # - Tuple of integers for different pixel margins: margins=(64, 64, 64, 64)
-    margins=0.0
+    margins=0.0,
+
+    # Include negative samples (tiles without any instances)
+    include_negative_samples=True
 )
 
 tiler = YoloTiler(
