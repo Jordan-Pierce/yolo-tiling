@@ -31,7 +31,8 @@ class TileConfig:
                  slice_wh: Union[int, Tuple[int, int]],
                  overlap_wh: Union[int, Tuple[float, float]] = 0,
                  annotation_type: str = "object_detection",
-                 ext: str = ".png",
+                 input_ext: str = ".png",
+                 output_ext: Optional[str] = None,
                  densify_factor: float = 0.5,
                  smoothing_tolerance: float = 0.1,
                  train_ratio: float = 0.8,
@@ -48,7 +49,8 @@ class TileConfig:
         self.slice_wh = slice_wh if isinstance(slice_wh, tuple) else (slice_wh, slice_wh)
         self.overlap_wh = overlap_wh
         self.annotation_type = annotation_type
-        self.ext = ext
+        self.input_ext = input_ext
+        self.output_ext = output_ext if output_ext is not None else input_ext
         self.densify_factor = densify_factor
         self.smoothing_tolerance = smoothing_tolerance
         self.train_ratio = train_ratio
@@ -484,7 +486,7 @@ class YoloTiler:
 
                 # Save tile image and labels if include_negative_samples is True or there are labels
                 if self.config.include_negative_samples or tile_labels:
-                    tile_suffix = f'_tile_{tile_idx}{self.config.ext}'
+                    tile_suffix = f'_tile_{tile_idx}{self.config.output_ext}'
                     self._save_tile(tile_data, image_path, tile_suffix, tile_labels, folder)
 
     def _save_tile_image(self, tile_data: np.ndarray, image_path: Path, suffix: str, folder: str) -> None:
@@ -501,7 +503,7 @@ class YoloTiler:
         save_dir = self.target / folder
 
         # Save the image
-        image_path = save_dir / "images" / image_path.name.replace(self.config.ext, suffix)
+        image_path = save_dir / "images" / image_path.name.replace(self.config.input_ext, suffix)
         with rasterio.open(
             image_path,
             'w',
@@ -525,7 +527,7 @@ class YoloTiler:
             folder: Subfolder name (train, valid, test)
         """
         # Save the labels in the appropriate directory
-        label_path = self.target / folder / "labels" / image_path.name.replace(self.config.ext, suffix)
+        label_path = self.target / folder / "labels" / image_path.name.replace(self.config.input_ext, suffix)
         label_path = label_path.with_suffix('.txt')
         is_segmentation = self.config.annotation_type == "instance_segmentation"
         self._save_labels(labels, label_path, is_segmentation)
@@ -554,7 +556,7 @@ class YoloTiler:
         Split train data into train, valid, and test sets using specified ratios.
         Files are moved from train to valid/test directories.
         """
-        train_images = list((self.target / 'train' / 'images').glob(f'*{self.config.ext}'))
+        train_images = list((self.target / 'train' / 'images').glob(f'*{self.config.output_ext}'))
         train_labels = list((self.target / 'train' / 'labels').glob('*.txt'))
 
         if not train_images or not train_labels:
@@ -619,7 +621,7 @@ class YoloTiler:
 
     def _process_subfolder(self, subfolder: str) -> None:
         """Process images and labels in a subfolder."""
-        image_paths = list((self.source / subfolder / 'images').glob(f'*{self.config.ext}'))
+        image_paths = list((self.source / subfolder / 'images').glob(f'*{self.config.input_ext}'))
         label_paths = list((self.source / subfolder / 'labels').glob('*.txt'))
 
         # Log the number of images, labels found
@@ -642,8 +644,8 @@ class YoloTiler:
 
     def _check_and_split_data(self) -> None:
         """Check if valid or test folders are empty and split data if necessary."""
-        valid_images = list((self.target / 'valid' / 'images').glob(f'*{self.config.ext}'))
-        test_images = list((self.target / 'test' / 'images').glob(f'*{self.config.ext}'))
+        valid_images = list((self.target / 'valid' / 'images').glob(f'*{self.config.output_ext}'))
+        test_images = list((self.target / 'test' / 'images').glob(f'*{self.config.output_ext}'))
 
         if not valid_images or not test_images:
             self.split_data()
@@ -668,7 +670,7 @@ class YoloTiler:
         train_image_dir = self.target / 'train' / 'images'
         train_label_dir = self.target / 'train' / 'labels'
 
-        image_paths = list(train_image_dir.glob(f'*{self.config.ext}'))
+        image_paths = list(train_image_dir.glob(f'*{self.config.output_ext}'))
 
         if not image_paths:
             self.logger.warning("No images found in train folder for visualization")
