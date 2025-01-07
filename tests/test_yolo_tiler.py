@@ -22,6 +22,7 @@ config = TileConfig(
     valid_ratio=0.2,
     test_ratio=0.1,
     margins=(0, 0, 0, 0),  # Left, top, right, bottom
+    include_negative_samples=True  # Inlude negative samples
 )
 
 

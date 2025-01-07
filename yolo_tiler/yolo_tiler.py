@@ -37,11 +37,13 @@ class TileConfig:
                  train_ratio: float = 0.8,
                  valid_ratio: float = 0.1,
                  test_ratio: float = 0.1,
-                 margins: Union[float, Tuple[float, float, float, float]] = 0.0):
+                 margins: Union[float, Tuple[float, float, float, float]] = 0.0,
+                 include_negative_samples: bool = True):
         """
         Args:
             margins: Either a single float (0-1) for uniform margins,
                     or tuple (left, top, right, bottom) of floats (0-1) or ints
+            include_negative_samples: Boolean to determine if negative samples should be included
         """
         self.slice_wh = slice_wh if isinstance(slice_wh, tuple) else (slice_wh, slice_wh)
         self.overlap_wh = overlap_wh
@@ -52,6 +54,7 @@ class TileConfig:
         self.train_ratio = train_ratio
         self.valid_ratio = valid_ratio
         self.test_ratio = test_ratio
+        self.include_negative_samples = include_negative_samples
 
         # Handle margins
         if isinstance(margins, (int, float)):
@@ -479,9 +482,10 @@ class YoloTiler:
                             normalized = self._normalize_coordinates(coord_lists, (abs_x1, abs_y1, abs_x2, abs_y2))
                             tile_labels.append([box_class, normalized])
 
-                # Save tile image and labels
-                tile_suffix = f'_tile_{tile_idx}{self.config.ext}'
-                self._save_tile(tile_data, image_path, tile_suffix, tile_labels, folder)
+                # Save tile image and labels if include_negative_samples is True or there are labels
+                if self.config.include_negative_samples or tile_labels:
+                    tile_suffix = f'_tile_{tile_idx}{self.config.ext}'
+                    self._save_tile(tile_data, image_path, tile_suffix, tile_labels, folder)
 
     def _save_tile_image(self, tile_data: np.ndarray, image_path: Path, suffix: str, folder: str) -> None:
         """
