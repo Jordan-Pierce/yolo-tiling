@@ -90,7 +90,7 @@ tiler = YoloTiler(
 tiler.run()
 ```
 
-An example of an (optional) `process_callback` function can be seen below:
+An example of an (optional) `progress_callback` function can be seen below:
 
 ```python
 from yolo_tiler import TilerProgress
