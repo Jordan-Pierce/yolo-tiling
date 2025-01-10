@@ -111,7 +111,7 @@ dataset/
 You can also use the command line interface to run the tiling process. Here are the instructions:
 
 ```bash
-yolo_tiler --source --target [--slice_wh SLICE_WH SLICE_WH] [--overlap_wh OVERLAP_WH OVERLAP_WH] [--input_ext INPUT_EXT] [--output_ext OUTPUT_EXT] [--annotation_type ANNOTATION_TYPE] [--densify_factor DENSIFY_FACTOR] [--smoothing_tolerance SMOOTHING_TOLERANCE] [--train_ratio TRAIN_RATIO] [--valid_ratio VALID_RATIO] [--test_ratio TEST_RATIO] [--margins MARGINS] [--include_negative_samples INCLUDE_NEGATIVE_SAMPLES]
+yolo-tiling --source --target [--slice_wh SLICE_WH SLICE_WH] [--overlap_wh OVERLAP_WH OVERLAP_WH] [--input_ext INPUT_EXT] [--output_ext OUTPUT_EXT] [--annotation_type ANNOTATION_TYPE] [--densify_factor DENSIFY_FACTOR] [--smoothing_tolerance SMOOTHING_TOLERANCE] [--train_ratio TRAIN_RATIO] [--valid_ratio VALID_RATIO] [--test_ratio TEST_RATIO] [--margins MARGINS] [--include_negative_samples INCLUDE_NEGATIVE_SAMPLES]
 ```
 
 ### Test Data
@@ -123,17 +123,17 @@ python tests/test_yolo_tiler.py
 
 1. Basic usage with default parameters:
 ```bash
-yolo_tiler --source tests/detection --target tests/detection_tiled
+yolo-tiling --source tests/detection --target tests/detection_tiled
 ```
 
 2. Custom slice size and overlap:
 ```bash
-yolo_tiler --source tests/detection --target tests/detection_tiled --slice_wh 640 480 --overlap_wh 0.1 0.1
+yolo-tiling --source tests/detection --target tests/detection_tiled --slice_wh 640 480 --overlap_wh 0.1 0.1
 ```
 
 3. Custom annotation type and image extension:
 ```bash
-yolo_tiler --source tests/segmentation --target tests/segmentation_tiled --annotation_type instance_segmentation --input_ext .jpg --output_ext .png
+yolo-tiling --source tests/segmentation --target tests/segmentation_tiled --annotation_type instance_segmentation --input_ext .jpg --output_ext .png
 ```
 
 ### Memory Efficiency
