@@ -10,8 +10,8 @@ def progress_callback(progress: TileProgress):
           f"tile {progress.current_tile}/{progress.total_tiles}")
 
 
-src = "./tests/segmentation_tiled"
-dst = "./tests/segmentation_tiled_tiled"
+src = "./tests/segmentation"
+dst = "./tests/segmentation_tiled"
 
 config = TileConfig(
     slice_wh=(320, 240),  # Slice width and height
