@@ -57,11 +57,11 @@ config = TileConfig(
 
     # For segmentation only: Controls point density along polygon edges
     # Lower values = more points, higher quality but larger files
-    densify_factor=0.5,
+    densify_factor=0.01,
 
     # For segmentation only: Controls polygon smoothing
     # Lower values = more details preserved, higher values = smoother shapes
-    smoothing_tolerance=0.1,
+    smoothing_tolerance=0.99,
 
     # Dataset split ratios (must sum to 1.0)
     train_ratio=0.7,  # Proportion of data for training
@@ -84,6 +84,7 @@ tiler = YoloTiler(
     target=dst,
     config=config,
     num_viz_samples=15,  # Number of samples to visualize
+    callback=progress_callback  # Optional callback function to report progress
 )
 
 tiler.run()
@@ -110,7 +111,7 @@ dataset/
 You can also use the command line interface to run the tiling process. Here are the instructions:
 
 ```bash
-python src/yolo_tiler.py --source --target [--slice_wh SLICE_WH SLICE_WH] [--overlap_wh OVERLAP_WH OVERLAP_WH] [--input_ext INPUT_EXT] [--output_ext OUTPUT_EXT] [--annotation_type ANNOTATION_TYPE] [--densify_factor DENSIFY_FACTOR] [--smoothing_tolerance SMOOTHING_TOLERANCE] [--train_ratio TRAIN_RATIO] [--valid_ratio VALID_RATIO] [--test_ratio TEST_RATIO]
+yolo_tiler --source --target [--slice_wh SLICE_WH SLICE_WH] [--overlap_wh OVERLAP_WH OVERLAP_WH] [--input_ext INPUT_EXT] [--output_ext OUTPUT_EXT] [--annotation_type ANNOTATION_TYPE] [--densify_factor DENSIFY_FACTOR] [--smoothing_tolerance SMOOTHING_TOLERANCE] [--train_ratio TRAIN_RATIO] [--valid_ratio VALID_RATIO] [--test_ratio TEST_RATIO] [--margins MARGINS] [--include_negative_samples INCLUDE_NEGATIVE_SAMPLES]
 ```
 
 ### Test Data
@@ -122,17 +123,17 @@ python tests/test_yolo_tiler.py
 
 1. Basic usage with default parameters:
 ```bash
-python src/yolo_tiler.py --source tests/detection --target tests/detection_tiled
+yolo_tiler --source tests/detection --target tests/detection_tiled
 ```
 
 2. Custom slice size and overlap:
 ```bash
-python src/yolo_tiler.py --source tests/detection --target tests/detection_tiled --slice_wh 640 480 --overlap_wh 0.1 0.1
+yolo_tiler --source tests/detection --target tests/detection_tiled --slice_wh 640 480 --overlap_wh 0.1 0.1
 ```
 
 3. Custom annotation type and image extension:
 ```bash
-python src/yolo_tiler.py --source tests/segmentation --target tests/segmentation_tiled --annotation_type instance_segmentation --input_ext .jpg --output_ext .png
+yolo_tiler --source tests/segmentation --target tests/segmentation_tiled --annotation_type instance_segmentation --input_ext .jpg --output_ext .png
 ```
 
 ### Memory Efficiency
