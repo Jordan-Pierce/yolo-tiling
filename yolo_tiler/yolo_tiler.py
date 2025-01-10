@@ -2,17 +2,21 @@ import logging
 import math
 import random
 import warnings
+from tqdm import tqdm
+
 from dataclasses import dataclass
 from pathlib import Path
 from shutil import copyfile
 from typing import List, Tuple, Optional, Union, Generator, Callable
 
 import cv2
+import shapely
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import rasterio
+
 from matplotlib.patches import Polygon as MplPolygon
 from rasterio.windows import Window
 from shapely.geometry import Polygon, MultiPolygon
@@ -115,7 +119,8 @@ class YoloTiler:
                  target: Union[str, Path],
                  config: TileConfig,
                  num_viz_samples: int = 0,
-                 callback: Optional[Callable[[TileProgress], None]] = None):
+                 show_processing_status: bool = True,
+                 progress_callback: Optional[Callable[[TileProgress], None]] = None):
         """
         Initialize YoloTiler with source and target directories.
 
@@ -124,20 +129,56 @@ class YoloTiler:
             target: Target directory for sliced dataset
             config: TileConfig object containing tiling parameters
             num_viz_samples: Number of random samples to visualize from train set
-            callback: Optional callback function to report progress
+            show_processing_status: Whether to show processing status
+            progress_callback: Optional callback function to report progress
         """
         self.source = Path(source)
         self.target = Path(target)
         self.config = config
-        self.callback = callback
-        self.logger = self._setup_logger()
         self.num_viz_samples = num_viz_samples
+        
+        # Add show_process_status parameter and initialize progress bars dict
+        self.show_process_status = show_processing_status
+        self._progress_bars = {}
+        
+        # Set up the progress callback based on parameters
+        if progress_callback is not None:
+            self.progress_callback = progress_callback
+        elif show_processing_status:
+            self.progress_callback = self._tqdm_callback
+        else:
+            self.progress_callback = None
+        
+        self.logger = self._setup_logger()
         self.subfolders = ['train/', 'valid/', 'test/']
 
         # Create rendered directory if visualization is requested
         if self.num_viz_samples > 0:
             self.render_dir = self.target / 'rendered'
             self.render_dir.mkdir(parents=True, exist_ok=True)
+            
+    def _tqdm_callback(self, progress: TileProgress):
+        """Internal callback function that uses tqdm for progress tracking
+        
+        Args:
+            progress: TileProgress object containing current progress
+            
+        """
+        if progress.current_set not in self._progress_bars:
+            self._progress_bars[progress.current_set] = tqdm(
+                total=progress.total_tiles,
+                desc=progress.current_set,
+                unit='items'
+            )
+        
+        # Update progress
+        self._progress_bars[progress.current_set].n = progress.current_tile
+        self._progress_bars[progress.current_set].refresh()
+        
+        # Close and cleanup if task is complete
+        if progress.current_tile >= progress.total_tiles:
+            self._progress_bars[progress.current_set].close()
+            del self._progress_bars[progress.current_set]
 
     def _setup_logger(self) -> logging.Logger:
         """Configure logging for the tiler"""
@@ -287,16 +328,27 @@ class YoloTiler:
 
     def _process_intersection(self, intersection: Union[Polygon, MultiPolygon]) -> List[List[Tuple[float, float]]]:
         """Process intersection geometry with proper polygon closure."""
-        def process_single_polygon(poly: Polygon) -> List[List[Tuple[float, float]]]:
+        from shapely.geometry import LineString, Polygon, MultiPolygon
+        
+        def process_single_polygon(geom) -> List[List[Tuple[float, float]]]:
+            # Handle LineString case
+            if isinstance(geom, LineString):
+                # Convert LineString to a very thin polygon
+                buffer_dist = 1e-10
+                geom = geom.buffer(buffer_dist)
+            
+            if not isinstance(geom, Polygon):
+                return []
+                
             # Ensure proper closure of exterior ring
-            exterior_coords = list(poly.exterior.coords)
+            exterior_coords = list(geom.exterior.coords)
             if exterior_coords[0] != exterior_coords[-1]:
                 exterior_coords.append(exterior_coords[0])
 
             result = [exterior_coords[:-1]]  # Remove duplicate closing point
 
             # Process holes with proper closure
-            for interior in poly.interiors:
+            for interior in geom.interiors:
                 interior_coords = list(interior.coords)
                 if interior_coords[0] != interior_coords[-1]:
                     interior_coords.append(interior_coords[0])
@@ -304,16 +356,25 @@ class YoloTiler:
 
             return result
 
-        if isinstance(intersection, Polygon):
-            return process_single_polygon(intersection)
-        else:  # MultiPolygon
+        if isinstance(intersection, MultiPolygon):
             all_coords = []
             for poly in intersection.geoms:
                 all_coords.extend(process_single_polygon(poly))
             return all_coords
+        else:
+            return process_single_polygon(intersection)
 
-    def _normalize_coordinates(self, coord_lists: List[List[Tuple[float, float]]],
-                            tile_bounds: Tuple[int, int, int, int]) -> str:
+            if isinstance(intersection, Polygon):
+                return process_single_polygon(intersection)
+            else:  # MultiPolygon
+                all_coords = []
+                for poly in intersection.geoms:
+                    all_coords.extend(process_single_polygon(poly))
+                return all_coords
+
+    def _normalize_coordinates(self, 
+                               coord_lists: List[List[Tuple[float, float]]],
+                               tile_bounds: Tuple[int, int, int, int]) -> str:
         """Normalize coordinates with proper polygon closure."""
         x1, y1, x2, y2 = tile_bounds
         tile_width = x2 - x1
@@ -355,6 +416,17 @@ class YoloTiler:
         """
         Tile an image and its corresponding labels, properly handling margins.
         """
+        def clean_geometry(geom: Polygon) -> Polygon:
+            """Clean potentially invalid geometry"""
+            if not geom.is_valid:
+                # Apply small buffer to fix self-intersections
+                cleaned = geom.buffer(0)
+                if cleaned.is_valid:
+                    return cleaned
+                # Try more aggressive cleaning if needed
+                return geom.buffer(1e-10).buffer(-1e-10)
+            return geom
+
         # Read image and labels
         with rasterio.open(image_path) as src:
             width, height = src.width, src.height
@@ -379,69 +451,85 @@ class YoloTiler:
             boxes = []
             with open(label_path) as f:
                 for line in f:
-                    parts = line.strip().split()
-                    class_id = int(parts[0])
+                    try:
+                        parts = line.strip().split()
+                        class_id = int(parts[0])
 
-                    if self.config.annotation_type == "object_detection":
-                        # Parse normalized coordinates
-                        x_center_norm = float(parts[1])
-                        y_center_norm = float(parts[2])
-                        box_w_norm = float(parts[3])
-                        box_h_norm = float(parts[4])
+                        if self.config.annotation_type == "object_detection":
+                            # Parse normalized coordinates
+                            x_center_norm = float(parts[1])
+                            y_center_norm = float(parts[2])
+                            box_w_norm = float(parts[3])
+                            box_h_norm = float(parts[4])
 
-                        # Convert to absolute coordinates
-                        x_center = x_center_norm * width
-                        y_center = y_center_norm * height
-                        box_w = box_w_norm * width
-                        box_h = box_h_norm * height
+                            # Convert to absolute coordinates
+                            x_center = x_center_norm * width
+                            y_center = y_center_norm * height
+                            box_w = box_w_norm * width
+                            box_h = box_h_norm * height
 
-                        x1 = x_center - box_w / 2
-                        y1 = y_center - box_h / 2
-                        x2 = x_center + box_w / 2
-                        y2 = y_center + box_h / 2
-                        box_polygon = Polygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])
+                            x1 = x_center - box_w / 2
+                            y1 = y_center - box_h / 2
+                            x2 = x_center + box_w / 2
+                            y2 = y_center + box_h / 2
+                            box_polygon = Polygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])
 
-                        # Only include if box intersects with effective area
-                        if box_polygon.intersects(effective_area):
-                            # Clip box to effective area
-                            clipped_box = box_polygon.intersection(effective_area)
-                            if not clipped_box.is_empty:
-                                boxes.append((class_id, clipped_box))
-                    else:
-                        # Instance segmentation
-                        points = []
-                        for i in range(1, len(parts), 2):
-                            x_norm = float(parts[i])
-                            y_norm = float(parts[i + 1])
-                            x = x_norm * width
-                            y = y_norm * height
-                            points.append((x, y))
+                            # Only include if box intersects with effective area
+                            if box_polygon.intersects(effective_area):
+                                # Clip box to effective area
+                                clipped_box = box_polygon.intersection(effective_area)
+                                if not clipped_box.is_empty:
+                                    boxes.append((class_id, clipped_box))
+                        else:
+                            # Instance segmentation
+                            points = []
+                            for i in range(1, len(parts), 2):
+                                x_norm = float(parts[i])
+                                y_norm = float(parts[i + 1])
+                                x = x_norm * width
+                                y = y_norm * height
+                                points.append((x, y))
 
-                        polygon = Polygon(points)
-                        # Only include if polygon intersects with effective area
-                        if polygon.intersects(effective_area):
-                            # Clip polygon to effective area
-                            clipped_polygon = polygon.intersection(effective_area)
-                            if not clipped_polygon.is_empty:
-                                boxes.append((class_id, clipped_polygon))
+                            try:
+                                polygon = Polygon(points)
+                                # Clean and validate polygon
+                                polygon = clean_geometry(polygon)
+                                
+                                if polygon.is_valid and polygon.intersects(effective_area):
+                                    # Safely perform intersection
+                                    try:
+                                        clipped_polygon = polygon.intersection(effective_area)
+                                        if not clipped_polygon.is_empty:
+                                            boxes.append((class_id, clipped_polygon))
+                                    except (shapely.errors.GEOSException, ValueError) as e:
+                                        print(f"Warning: Failed to process polygon in {image_path.name}: {e}")
+                                        continue
+                            except Exception as e:
+                                print(f"Warning: Invalid polygon in {image_path.name}: {e}")
+                                continue
+                    except Exception as e:
+                        print(f"Warning: Failed to process line in {label_path}: {e}")
+                        continue
 
+            # Calculate tile positions
+            effective_areas = self._calculate_tile_positions((effective_width, effective_height))
+            
             # Process each tile within effective area
-            for tile_idx, (x1, y1, x2, y2) in enumerate(
-                self._calculate_tile_positions((effective_width, effective_height))):
+            for tile_idx, (x1, y1, x2, y2) in enumerate(effective_areas):
                 # Convert tile coordinates to absolute image coordinates
                 abs_x1 = x1 + x_min
                 abs_y1 = y1 + y_min
                 abs_x2 = x2 + x_min
                 abs_y2 = y2 + y_min
 
-                if self.callback:
+                if self.progress_callback:
                     progress = TileProgress(
                         current_tile=tile_idx + 1,
                         total_tiles=total_tiles,
                         current_set=folder.rstrip('/'),
                         current_image=image_path.name
                     )
-                    self.callback(progress)
+                    self.progress_callback(progress)
 
                 # Extract tile data
                 window = Window(abs_x1, abs_y1, abs_x2 - abs_x1, abs_y2 - abs_y1)
@@ -514,7 +602,7 @@ class YoloTiler:
             dtype=tile_data.dtype
         ) as dst:
             dst.write(tile_data)
-        self.logger.info(f"Saved tile to {image_path}")
+        # self.logger.info(f"Saved tile to {image_path}")
 
     def _save_tile_labels(self, labels: Optional[List], image_path: Path, suffix: str, folder: str) -> None:
         """
@@ -578,26 +666,26 @@ class YoloTiler:
         for tile_idx, (image_path, label_path) in enumerate(valid_set):
             self._move_split_data(image_path, label_path, 'valid')
 
-            if self.callback:
+            if self.progress_callback:
                 progress = TileProgress(
                     current_tile=tile_idx + 1,
                     total_tiles=num_valid,
                     current_set='valid',
                     current_image=image_path.name
                 )
-                self.callback(progress)
+                self.progress_callback(progress)
 
         # Move files to test folder
         for tile_idx, (image_path, label_path) in enumerate(test_set):
             self._move_split_data(image_path, label_path, 'test')
-            if self.callback:
+            if self.progress_callback:
                 progress = TileProgress(
                     current_tile=tile_idx + 1,
                     total_tiles=num_test,
                     current_set='test',
                     current_image=image_path.name
                 )
-                self.callback(progress)
+                self.progress_callback(progress)
 
     def _move_split_data(self, image_path: Path, label_path: Path, folder: str) -> None:
         """
@@ -688,14 +776,14 @@ class YoloTiler:
                 self.logger.warning(f"Label file not found for {image_path.name}")
                 continue
 
-            if self.callback:
+            if self.progress_callback:
                 progress = TileProgress(
                     current_tile=tile_idx + 1,
                     total_tiles=num_samples,
                     current_set='rendered',
                     current_image=image_path.name
                 )
-                self.callback(progress)
+                self.progress_callback(progress)
 
             self._render_single_sample(image_path, label_path, tile_idx + 1)
 
@@ -786,7 +874,7 @@ class YoloTiler:
         plt.savefig(output_path, bbox_inches='tight', pad_inches=0, dpi=300)
         plt.close()
 
-        self.logger.info(f"Saved visualization to {output_path}")
+        # self.logger.info(f"Saved visualization to {output_path}")
 
     def run(self) -> None:
         """Run the complete tiling process"""
@@ -815,3 +903,9 @@ class YoloTiler:
         except Exception as e:
             self.logger.error(f'Error during tiling process: {str(e)}')
             raise
+        
+    def __del__(self):
+        """Cleanup method to ensure all progress bars are closed"""
+        for pbar in self._progress_bars.values():
+            pbar.close()
+        self._progress_bars.clear()

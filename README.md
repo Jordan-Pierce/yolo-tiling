@@ -10,10 +10,9 @@
 [![ubuntu](https://github.com/Jordan-Pierce/yolo-tiling/actions/workflows/ubuntu.yml/badge.svg)](https://pypi.org/project/yolo-tiling)
 </div>
 
-This module can cut images and corresponding labels from YOLO dataset into tiles of specified size and create a
+This module can cut images and corresponding labels from a YOLO dataset into tiles of specified size and create a
 new dataset based on these tiles. It supports both object detection and instance segmentation. Credit for the original
 repository goes to [slanj](https://github.com/slanj/yolo-tiling).
-
 
 ## Installation
 
@@ -28,8 +27,8 @@ pip install yolo-tiling
 ```python
 from yolo_tiler import YoloTiler, TileConfig
 
-src = "path/to/dataset"  # Source YOLO dataset directory
-dst = "path/to/tiled_dataset"  # Output directory for tiled dataset
+src = "path/to/dataset"         # Source YOLO dataset directory
+dst = "path/to/tiled_dataset"   # Output directory for tiled dataset
 
 config = TileConfig(
     # Size of each tile (width, height). Can be:
@@ -83,14 +82,30 @@ tiler = YoloTiler(
     source=src,
     target=dst,
     config=config,
-    num_viz_samples=15,  # Number of samples to visualize
-    callback=progress_callback  # Optional callback function to report progress
+    num_viz_samples=15,                     # Number of samples to visualize
+    show_processing_status=True             # Show the progress of the tiling process
+    progress_callback=progress_callback     # Optional callback function to report progress (see below)
 )
 
 tiler.run()
 ```
 
-The tiler requires a YOLO dataset structure in both source and target directories. If only a `train` folder exists, the train / valid / test ratios will be used to split the tiled `train` folder; else, the ratios are ignored.
+An example of an (optional) `process_callback` function can be seen below:
+
+```python
+from yolo_tiler import TilerProgress
+
+def progress_callback(progress: TileProgress):
+    print(f"Processing {progress.current_image} in {progress.current_set} set: "
+          f"tile {progress.current_tile}/{progress.total_tiles}")
+
+```
+
+### Notes
+
+- The tiler **requires** a YOLO dataset structure within the source directory (see below). 
+- If only a `train` folder exists, the train / valid / test ratios will be used to split the tiled `train` folder.
+- If there already exists train / valid/ test folders in the source directory, the ratios are ignored.
 
 ```bash
 dataset/
@@ -106,34 +121,36 @@ dataset/
 └── data.yaml  # Optional
 ```
 
-## Command Line Usage
-
-You can also use the command line interface to run the tiling process. Here are the instructions:
-
-```bash
-yolo-tiling --source --target [--slice_wh SLICE_WH SLICE_WH] [--overlap_wh OVERLAP_WH OVERLAP_WH] [--input_ext INPUT_EXT] [--output_ext OUTPUT_EXT] [--annotation_type ANNOTATION_TYPE] [--densify_factor DENSIFY_FACTOR] [--smoothing_tolerance SMOOTHING_TOLERANCE] [--train_ratio TRAIN_RATIO] [--valid_ratio VALID_RATIO] [--test_ratio TEST_RATIO] [--margins MARGINS] [--include_negative_samples INCLUDE_NEGATIVE_SAMPLES]
-```
-
 ### Test Data
+
 ```bash
 python tests/test_yolo_tiler.py
+```
+
+## Command Line Usage
+
+In addition to using the tiler within a script, it can also use the command line interface to run the tiling process. 
+Here are the instructions:
+
+```bash
+yolo_tiler --source --target [--slice_wh SLICE_WH SLICE_WH] [--overlap_wh OVERLAP_WH OVERLAP_WH] [--input_ext INPUT_EXT] [--output_ext OUTPUT_EXT] [--annotation_type ANNOTATION_TYPE] [--densify_factor DENSIFY_FACTOR] [--smoothing_tolerance SMOOTHING_TOLERANCE] [--train_ratio TRAIN_RATIO] [--valid_ratio VALID_RATIO] [--test_ratio TEST_RATIO] [--margins MARGINS] [--include_negative_samples INCLUDE_NEGATIVE_SAMPLES]
 ```
 
 ### Example Commands
 
 1. Basic usage with default parameters:
 ```bash
-yolo-tiling --source tests/detection --target tests/detection_tiled
+yolo_tiler --source tests/detection --target tests/detection_tiled
 ```
 
 2. Custom slice size and overlap:
 ```bash
-yolo-tiling --source tests/detection --target tests/detection_tiled --slice_wh 640 480 --overlap_wh 0.1 0.1
+yolo_tiler --source tests/detection --target tests/detection_tiled --slice_wh 640 480 --overlap_wh 0.1 0.1
 ```
 
 3. Custom annotation type and image extension:
 ```bash
-yolo-tiling --source tests/segmentation --target tests/segmentation_tiled --annotation_type instance_segmentation --input_ext .jpg --output_ext .png
+yolo_tiler--source tests/segmentation --target tests/segmentation_tiled --annotation_type instance_segmentation --input_ext .jpg --output_ext .png
 ```
 
 ### Memory Efficiency

@@ -44,6 +44,9 @@ def main():
 
     parser.add_argument("--test_ratio", type=float, default=0.1,
                         help="Test split ratio")
+    
+    parser.add_argument("--num_viz_samples", type=int, default=15,
+                        help="Number of visualization samples")
 
     args = parser.parse_args()
     config = TileConfig(
@@ -62,6 +65,7 @@ def main():
         source=args.source,
         target=args.target,
         config=config,
+        num_viz_samples=args.num_viz_samples,
     )
     tiler.run()
 

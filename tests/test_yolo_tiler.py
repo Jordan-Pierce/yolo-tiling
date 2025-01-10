@@ -10,11 +10,11 @@ def progress_callback(progress: TileProgress):
           f"tile {progress.current_tile}/{progress.total_tiles}")
 
 
-src = "./tests/segmentation"
-dst = "./tests/segmentation_tiled"
+src = "./tests/segmentation_tiled"
+dst = "./tests/segmentation_tiled_tiled"
 
 config = TileConfig(
-    slice_wh=(640, 480),  # Slice width and height
+    slice_wh=(320, 240),  # Slice width and height
     overlap_wh=(0.0, 0.0),  # Overlap width and height (10% overlap in this example, or 64x48 pixels)
     input_ext=".png",
     output_ext=None,
@@ -32,8 +32,8 @@ tiler = YoloTiler(
     source=src,
     target=dst,
     config=config,
-    num_viz_samples=15,
-    callback=progress_callback
+    num_viz_samples=100,
+    # progress_callback=progress_callback
 )
 
 # Run tiling process
