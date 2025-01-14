@@ -14,8 +14,8 @@ def progress_callback(progress: TileProgress):
         print(f"Processing {progress.current_image_name} in {progress.current_set_name} set: "
               f"Image {progress.current_image_idx}/{progress.total_images}")
         
-src = "./tests/detection_tiled"
-dst = "./tests/detection_tiled_tiled"
+src = "./tests/detection"
+dst = "./tests/detection_tiled"
 
 config = TileConfig(
     slice_wh=(320, 240),  # Slice width and height
