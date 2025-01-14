@@ -7,7 +7,8 @@ from yolo_tiler import YoloTiler, TileConfig, TileProgress
 
 def progress_callback(progress: TileProgress):
     print(f"Processing {progress.current_image_name} in {progress.current_set_name} set: "
-          f"tile {progress.current_tile_idx}/{progress.total_tiles}")
+          f"tile {progress.current_tile_idx}/{progress.total_tiles}, "
+          f"image {progress.current_image_idx}/{progress.total_images}")
 
 
 src = "./tests/segmentation"
@@ -33,7 +34,7 @@ tiler = YoloTiler(
     target=dst,
     config=config,
     num_viz_samples=100,
-    # progress_callback=progress_callback
+    progress_callback=progress_callback
 )
 
 # Run tiling process

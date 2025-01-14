@@ -414,7 +414,7 @@ class YoloTiler:
             df = pd.DataFrame(labels, columns=['class', 'x1', 'y1', 'w', 'h'])
             df.to_csv(path, sep=' ', index=False, header=False, float_format='%.6f')
 
-    def tile_image(self, image_path: Path, label_path: Path, folder: str) -> None:
+    def tile_image(self, image_path: Path, label_path: Path, folder: str, current_image_idx: int, total_images: int) -> None:
         """
         Tile an image and its corresponding labels, properly handling margins.
         """
@@ -530,8 +530,8 @@ class YoloTiler:
                         total_tiles=total_tiles,
                         current_set_name=folder.rstrip('/'),
                         current_image_name=image_path.name,
-                        current_image_idx=0,  # Placeholder, update as needed
-                        total_images=0  # Placeholder, update as needed
+                        current_image_idx=current_image_idx,
+                        total_images=total_images
                     )
                     self.progress_callback(progress)
 
@@ -732,11 +732,13 @@ class YoloTiler:
             self.logger.error(f"Number of images and labels do not match in {subfolder} directory, skipping")
             return
 
+        total_images = len(image_paths)
+
         # Process each image
-        for image_path, label_path in list(zip(image_paths, label_paths)):
+        for current_image_idx, (image_path, label_path) in enumerate(zip(image_paths, label_paths)):
             assert image_path.stem == label_path.stem, "Image and label filenames do not match"
             self.logger.info(f'Processing {image_path}')
-            self.tile_image(image_path, label_path, subfolder)
+            self.tile_image(image_path, label_path, subfolder, current_image_idx + 1, total_images)
 
     def _check_and_split_data(self) -> None:
         """Check if valid or test folders are empty and split data if necessary."""
