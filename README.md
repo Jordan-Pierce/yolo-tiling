@@ -90,14 +90,32 @@ tiler = YoloTiler(
 tiler.run()
 ```
 
-An example of an (optional) `progress_callback` function can be seen below:
+```python
+@dataclass
+class TileProgress:
+    """Data class to track tiling progress"""
+    current_set_name: str = ""
+    current_image_name: str = ""
+    current_image_idx: int = 0
+    total_images: int = 0
+    current_tile_idx: int = 0  
+    total_tiles: int = 0  
+```
+
+Using `TileProgress` custom callback functions can be created. An example of an (optional) `progress_callback` function 
+can be seen below:
 
 ```python
 from yolo_tiler import TilerProgress
 
 def progress_callback(progress: TileProgress):
-    print(f"Processing {progress.current_image} in {progress.current_set} set: "
-          f"tile {progress.current_tile}/{progress.total_tiles}")
+    # Determine whether to show tile or image progress
+    if progress.total_tiles > 0:
+        print(f"Processing {progress.current_image_name} in {progress.current_set_name} set: "
+              f"Tile {progress.current_tile_idx}/{progress.total_tiles}")
+    else:
+        print(f"Processing {progress.current_image_name} in {progress.current_set_name} set: "
+              f"Image {progress.current_image_idx}/{progress.total_images}")
 
 ```
 

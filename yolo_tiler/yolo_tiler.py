@@ -102,12 +102,12 @@ class TileConfig:
 @dataclass
 class TileProgress:
     """Data class to track tiling progress"""
-    current_set_name: str
-    current_image_name: str
-    current_image_idx: int
-    total_images: int
-    current_tile_idx: int
-    total_tiles: int
+    current_set_name: str = ""
+    current_image_name: str = ""
+    current_image_idx: int = 0
+    total_images: int = 0
+    current_tile_idx: int = 0  
+    total_tiles: int = 0  
 
 
 class YoloTiler:
@@ -166,19 +166,37 @@ class YoloTiler:
             progress: TileProgress object containing current progress
             
         """
+        # Initialize or get progress bar for current set
         if progress.current_set_name not in self._progress_bars:
+            # Determine if we're tracking tiles or images
+            if progress.total_tiles > 0:
+                total = progress.total_tiles
+                desc = f"{progress.current_set_name}: Tile"
+                unit = 'tiles'
+            else:
+                total = progress.total_images
+                desc = f"{progress.current_set_name}: Image"
+                unit = 'images'
+                
             self._progress_bars[progress.current_set_name] = tqdm(
-                total=progress.total_tiles,
-                desc=progress.current_set_name,
-                unit='items'
+                total=total,
+                desc=desc,
+                unit=unit
             )
         
-        # Update progress
-        self._progress_bars[progress.current_set_name].n = progress.current_tile_idx
+        # Update progress based on available information
+        if progress.total_tiles > 0:
+            self._progress_bars[progress.current_set_name].n = progress.current_tile_idx
+        else:
+            self._progress_bars[progress.current_set_name].n = progress.current_image_idx
+            
         self._progress_bars[progress.current_set_name].refresh()
         
         # Close and cleanup if task is complete
-        if progress.current_tile_idx >= progress.total_tiles:
+        is_complete = (progress.total_tiles > 0 and progress.current_tile_idx >= progress.total_tiles) or \
+                    (progress.total_tiles == 0 and progress.current_image_idx >= progress.total_images)
+                    
+        if is_complete:
             self._progress_bars[progress.current_set_name].close()
             del self._progress_bars[progress.current_set_name]
 
@@ -414,7 +432,12 @@ class YoloTiler:
             df = pd.DataFrame(labels, columns=['class', 'x1', 'y1', 'w', 'h'])
             df.to_csv(path, sep=' ', index=False, header=False, float_format='%.6f')
 
-    def tile_image(self, image_path: Path, label_path: Path, folder: str, current_image_idx: int, total_images: int) -> None:
+    def tile_image(self, 
+                   image_path: Path, 
+                   label_path: Path, 
+                   folder: str, 
+                   current_image_idx: int, 
+                   total_images: int) -> None:
         """
         Tile an image and its corresponding labels, properly handling margins.
         """
@@ -667,31 +690,31 @@ class YoloTiler:
         num_test = len(test_set)
 
         # Move files to valid folder
-        for tile_idx, (image_path, label_path) in enumerate(valid_set):
+        for image_idx, (image_path, label_path) in enumerate(valid_set):
             self._move_split_data(image_path, label_path, 'valid')
 
             if self.progress_callback:
                 progress = TileProgress(
-                    current_tile_idx=tile_idx + 1,
-                    total_tiles=num_valid,
+                    current_tile_idx=0,
+                    total_tiles=0,
                     current_set_name='valid',
                     current_image_name=image_path.name,
-                    current_image_idx=0,  # Placeholder, update as needed
-                    total_images=0  # Placeholder, update as needed
+                    current_image_idx=image_idx + 1,
+                    total_images=num_valid  
                 )
                 self.progress_callback(progress)
 
         # Move files to test folder
-        for tile_idx, (image_path, label_path) in enumerate(test_set):
+        for image_idx, (image_path, label_path) in enumerate(test_set):
             self._move_split_data(image_path, label_path, 'test')
             if self.progress_callback:
                 progress = TileProgress(
-                    current_tile_idx=tile_idx + 1,
-                    total_tiles=num_test,
+                    current_tile_idx=0,
+                    total_tiles=0,
                     current_set_name='test',
                     current_image_name=image_path.name,
-                    current_image_idx=0,  # Placeholder, update as needed
-                    total_images=0  # Placeholder, update as needed
+                    current_image_idx=image_idx + 1,
+                    total_images=num_test
                 )
                 self.progress_callback(progress)
 
@@ -779,7 +802,7 @@ class YoloTiler:
         selected_images = random.sample(image_paths, num_samples)
 
         # Process each selected image
-        for tile_idx, image_path in enumerate(selected_images):
+        for image_idx, image_path in enumerate(selected_images):
             label_path = train_label_dir / f"{image_path.stem}.txt"
 
             if not label_path.exists():
@@ -788,16 +811,16 @@ class YoloTiler:
 
             if self.progress_callback:
                 progress = TileProgress(
-                    current_tile_idx=tile_idx + 1,
-                    total_tiles=num_samples,
+                    current_tile_idx=0,
+                    total_tiles=0,
                     current_set_name='rendered',
                     current_image_name=image_path.name,
-                    current_image_idx=0,  # Placeholder, update as needed
-                    total_images=0  # Placeholder, update as needed
+                    current_image_idx=image_idx + 1,
+                    total_images=len(selected_images)
                 )
                 self.progress_callback(progress)
 
-            self._render_single_sample(image_path, label_path, tile_idx + 1)
+            self._render_single_sample(image_path, label_path, image_idx + 1)
 
     def _render_single_sample(self, image_path: Path, label_path: Path, idx: int) -> None:
         """
