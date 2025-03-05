@@ -772,11 +772,19 @@ class YoloTiler:
             self.split_data()
             self.logger.info('Split train data into valid and test sets')
 
-    def _copy_data_yaml(self) -> None:
-        """Copy data.yaml from source to target directory if it exists."""
+    def _copy_and_update_data_yaml(self) -> None:
+        """Copy and update data.yaml with new paths for tiled dataset."""
         data_yaml = self.source / 'data.yaml'
         if data_yaml.exists():
-            copyfile(data_yaml, self.target / 'data.yaml')
+            with open(data_yaml, 'r') as f:
+                data = f.read()
+
+            data = data.replace('../train/images', str(self.target / 'train' / 'images'))
+            data = data.replace('../valid/images', str(self.target / 'valid' / 'images'))
+            data = data.replace('../test/images', str(self.target / 'test' / 'images'))
+
+            with open(self.target / 'data.yaml', 'w') as f:
+                f.write(data)
         else:
             self.logger.warning('data.yaml not found in source directory')
 
@@ -926,8 +934,8 @@ class YoloTiler:
             # Check if valid or test folders are empty
             self._check_and_split_data()
 
-            # Copy data.yaml
-            self._copy_data_yaml()
+            # Copy and update data.yaml with new paths
+            self._copy_and_update_data_yaml()
 
             # Generate visualizations if requested
             if self.num_viz_samples > 0:
