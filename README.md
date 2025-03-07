@@ -11,8 +11,8 @@
 </div>
 
 This module can cut images and corresponding labels from a YOLO dataset into tiles of specified size and create a
-new dataset based on these tiles. It supports object detection, instance segmentation, and image classification. Credit for the original
-repository goes to [slanj](https://github.com/slanj/yolo-tiling).
+new dataset based on these tiles. It supports object detection, instance segmentation, and image classification. 
+Credit for the original repository goes to [slanj](https://github.com/slanj/yolo-tiling).
 
 ## Installation
 
@@ -134,7 +134,7 @@ dataset/
 ├── train/
 │   ├── images/
 │   └── labels/
-├── valid/
+├── valid/  # <--- "valid", not "val"
 │   ├── images/
 │   └── labels/
 ├── test/
@@ -150,7 +150,7 @@ dataset/
 ├── train/
 │   ├── class_1/
 │   └── class_2/
-├── val/
+├── val/    # <--- "val", not "valid"
 │   ├── class_1/
 │   └── class_2/
 ├── test/
@@ -187,7 +187,7 @@ yolo_tiler --source tests/detection --target tests/detection_tiled --slice_wh 64
 
 3. Custom annotation type and image extension:
 ```bash
-yolo_tiler--source tests/segmentation --target tests/segmentation_tiled --annotation_type instance_segmentation --input_ext .jpg --output_ext .png
+yolo_tiler --source tests/segmentation --target tests/segmentation_tiled --annotation_type instance_segmentation --input_ext .jpg --output_ext .png
 ```
 
 ### Memory Efficiency
