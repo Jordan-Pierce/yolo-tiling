@@ -1,5 +1,6 @@
 import logging
 import math
+import glob
 import random
 import warnings
 from tqdm import tqdm
@@ -46,9 +47,18 @@ class TileConfig:
                  include_negative_samples: bool = True):
         """
         Args:
-            margins: Either a single float (0-1) for uniform margins,
-                    or tuple (left, top, right, bottom) of floats (0-1) or ints
-            include_negative_samples: Boolean to determine if negative samples should be included
+            slice_wh: Size of each slice (width, height)
+            overlap_wh: Overlap between slices as a fraction of slice size (width, height)
+            annotation_type: Type of annotation format (object_detection, instance_segmentation, image_classification)
+            input_ext: Input image extension
+            output_ext: Output image extension (defaults to input_ext)
+            densify_factor: Factor to densify lines for smoothing
+            smoothing_tolerance: Tolerance for polygon simplification
+            train_ratio: Ratio of train set
+            valid_ratio: Ratio of valid set
+            test_ratio: Ratio of test set
+            margins: Margins to exclude from tiling (left, top, right, bottom)
+            include_negative_samples: Include tiles without annotations
         """
         self.slice_wh = slice_wh if isinstance(slice_wh, tuple) else (slice_wh, slice_wh)
         self.overlap_wh = overlap_wh
@@ -61,6 +71,11 @@ class TileConfig:
         self.valid_ratio = valid_ratio
         self.test_ratio = test_ratio
         self.include_negative_samples = include_negative_samples
+        
+        # Validate annoation type
+        if self.annotation_type not in ["object_detection", "instance_segmentation", "image_classification"]:
+            raise ValueError(f"ERROR: Invalid annotation type: {self.annotation_type}\n\
+                              Must be one of 'object_detection', 'instance_segmentation', 'image_classification'")
 
         # Handle margins
         if isinstance(margins, (int, float)):
@@ -152,7 +167,14 @@ class YoloTiler:
             self.progress_callback = None
         
         self.logger = self._setup_logger()
-        self.subfolders = ['train/', 'valid/', 'test/']
+        
+        # Get the annotation type
+        self.annotation_type = self.config.annotation_type
+        
+        if self.annotation_type != "image_classification":
+            self.subfolders = ['train/', 'valid/', 'test/']
+        else:
+            self.subfolders = ['train/', 'val/', 'test/']
 
         # Create rendered directory if visualization is requested
         if self.num_viz_samples > 0:
@@ -194,7 +216,7 @@ class YoloTiler:
         
         # Close and cleanup if task is complete
         is_complete = (progress.total_tiles > 0 and progress.current_tile_idx >= progress.total_tiles) or \
-                    (progress.total_tiles == 0 and progress.current_image_idx >= progress.total_images)
+                      (progress.total_tiles == 0 and progress.current_image_idx >= progress.total_images)
                     
         if is_complete:
             self._progress_bars[progress.current_set_name].close()
@@ -212,25 +234,52 @@ class YoloTiler:
 
     def _create_target_folder(self, target: Path) -> None:
         """Create target folder if it does not exist"""
+        
+        if self.annotation_type == "image_classification":
+            # Get class categories from source folders
+            class_cats = set()
+            for subfolder in self.subfolders:
+                class_cats.update([d.name for d in (self.source / subfolder).iterdir() if d.is_dir()])
+            # Unique and sorted class categories
+            class_cats = sorted(list(class_cats))
+            
         for subfolder in self.subfolders:
-            (target / subfolder / "images").mkdir(parents=True, exist_ok=True)
-            (target / subfolder / "labels").mkdir(parents=True, exist_ok=True)
+            if self.annotation_type == "image_classification":
+                for class_cat in class_cats:
+                    # tiled/subfolder/class_cat/
+                    (target / subfolder / class_cat).mkdir(parents=True, exist_ok=True)
+            else:
+                # tiled/subfolder/images and tiled/subfolder/labels
+                (target / subfolder / "images").mkdir(parents=True, exist_ok=True)
+                (target / subfolder / "labels").mkdir(parents=True, exist_ok=True)
 
     def _validate_yolo_structure(self, folder: Path) -> None:
         """
         Validate YOLO dataset folder structure.
 
         Args:
-            folder: Path to check for YOLO structure
+            folder: Soruce path to check for YOLO structure
 
         Raises:
-            ValueError: If required folders are missing
+            ValueError: If required folders {train, val/id, test} are missing
         """
+        # Subfolder contains {train, val/id, test}
         for subfolder in self.subfolders:
-            if not (folder / subfolder / 'images').exists():
-                raise ValueError(f"Required folder {folder / subfolder / 'images'} does not exist")
-            if not (folder / subfolder / 'labels').exists():
-                raise ValueError(f"Required folder {folder / subfolder / 'labels'} does not exist")
+            
+            if self.annotation_type == "image_classification":
+                # Check for class folders for image classification
+                if not (folder / subfolder).exists():
+                    raise ValueError(f"Required folder {folder / subfolder} does not exist")
+                else:
+                    class_folders = [sub.name for sub in (folder / subfolder).iterdir() if sub.is_dir()]
+                    if not class_folders:
+                        raise ValueError(f"No class folders found in {folder / subfolder}")
+            else:
+                # Check for images and labels folders for object detection and instance segmentation
+                if not (folder / subfolder / 'images').exists():
+                    raise ValueError(f"Required folder {folder / subfolder / 'images'} does not exist")
+                if not (folder / subfolder / 'labels').exists():
+                    raise ValueError(f"Required folder {folder / subfolder / 'labels'} does not exist")
 
     def _count_total_tiles(self, image_size: Tuple[int, int]) -> int:
         """Count total number of tiles for an image"""
@@ -417,7 +466,7 @@ class YoloTiler:
 
     def _save_labels(self, labels: List, path: Path, is_segmentation: bool) -> None:
         """
-        Save labels to file in appropriate format.
+        Save labels to file in appropriate format. Image classification ignored.
 
         Args:
             labels: List of label data
@@ -428,13 +477,14 @@ class YoloTiler:
             with open(path, 'w') as f:
                 for label_class, points in labels:
                     f.write(f"{label_class} {points}\n")
-        else:
+                    
+        else:  # Object detection
             df = pd.DataFrame(labels, columns=['class', 'x1', 'y1', 'w', 'h'])
             df.to_csv(path, sep=' ', index=False, header=False, float_format='%.6f')
 
     def tile_image(self, 
                    image_path: Path, 
-                   label_path: Path, 
+                   label_path: Union[Path, str],  # Path to labels.txt, or class name
                    folder: str, 
                    current_image_idx: int, 
                    total_images: int) -> None:
@@ -471,70 +521,89 @@ class YoloTiler:
 
             # Calculate total tiles for progress tracking
             total_tiles = self._count_total_tiles((effective_width, effective_height))
+            
+            # Read all lines from label file if object detection or instance segmentation
+            if self.annotation_type != "image_classification":
+                try:
+                    f = open(label_path)
+                    lines = f.readlines()
+                    f.close()
+                    
+                    # Boxes or polygons
+                    boxes = []
+                    
+                except Exception as e:
+                    raise ValueError(f"Failed to read label file {label_path}: {e}")
+                
+            else:  # Image classification (unnecessary for tiling)
+                lines = []
+                boxes = []
+                tile_labels = []
+            
+            # Process each line
+            for line in lines:
+                try:
+                    parts = line.strip().split()
+                    class_id = int(parts[0])
 
-            # Process annotations
-            boxes = []
-            with open(label_path) as f:
-                for line in f:
-                    try:
-                        parts = line.strip().split()
-                        class_id = int(parts[0])
+                    if self.config.annotation_type == "object_detection":
+                        # Parse normalized coordinates
+                        x_center_norm = float(parts[1])
+                        y_center_norm = float(parts[2])
+                        box_w_norm = float(parts[3])
+                        box_h_norm = float(parts[4])
 
-                        if self.config.annotation_type == "object_detection":
-                            # Parse normalized coordinates
-                            x_center_norm = float(parts[1])
-                            y_center_norm = float(parts[2])
-                            box_w_norm = float(parts[3])
-                            box_h_norm = float(parts[4])
+                        # Convert to absolute coordinates
+                        x_center = x_center_norm * width
+                        y_center = y_center_norm * height
+                        box_w = box_w_norm * width
+                        box_h = box_h_norm * height
 
-                            # Convert to absolute coordinates
-                            x_center = x_center_norm * width
-                            y_center = y_center_norm * height
-                            box_w = box_w_norm * width
-                            box_h = box_h_norm * height
+                        x1 = x_center - box_w / 2
+                        y1 = y_center - box_h / 2
+                        x2 = x_center + box_w / 2
+                        y2 = y_center + box_h / 2
+                        box_polygon = Polygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])
 
-                            x1 = x_center - box_w / 2
-                            y1 = y_center - box_h / 2
-                            x2 = x_center + box_w / 2
-                            y2 = y_center + box_h / 2
-                            box_polygon = Polygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])
+                        # Only include if box intersects with effective area
+                        if box_polygon.intersects(effective_area):
+                            # Clip box to effective area
+                            clipped_box = box_polygon.intersection(effective_area)
+                            if not clipped_box.is_empty:
+                                boxes.append((class_id, clipped_box))
+            
+                    else:  # Instance segmentation
+                        points = []
+                        for i in range(1, len(parts), 2):
+                            x_norm = float(parts[i])
+                            y_norm = float(parts[i + 1])
+                            x = x_norm * width
+                            y = y_norm * height
+                            points.append((x, y))
 
-                            # Only include if box intersects with effective area
-                            if box_polygon.intersects(effective_area):
-                                # Clip box to effective area
-                                clipped_box = box_polygon.intersection(effective_area)
-                                if not clipped_box.is_empty:
-                                    boxes.append((class_id, clipped_box))
-                        else:
-                            # Instance segmentation
-                            points = []
-                            for i in range(1, len(parts), 2):
-                                x_norm = float(parts[i])
-                                y_norm = float(parts[i + 1])
-                                x = x_norm * width
-                                y = y_norm * height
-                                points.append((x, y))
-
-                            try:
-                                polygon = Polygon(points)
-                                # Clean and validate polygon
-                                polygon = clean_geometry(polygon)
+                        try:
+                            polygon = Polygon(points)
+                            # Clean and validate polygon
+                            polygon = clean_geometry(polygon)
+                            
+                            if polygon.is_valid and polygon.intersects(effective_area):
+                                # Safely perform intersection
+                                try:
+                                    clipped_polygon = polygon.intersection(effective_area)
+                                    if not clipped_polygon.is_empty:
+                                        boxes.append((class_id, clipped_polygon))
+                                        
+                                except (shapely.errors.GEOSException, ValueError) as e:
+                                    print(f"Warning: Failed to process polygon in {image_path.name}: {e}")
+                                    continue
                                 
-                                if polygon.is_valid and polygon.intersects(effective_area):
-                                    # Safely perform intersection
-                                    try:
-                                        clipped_polygon = polygon.intersection(effective_area)
-                                        if not clipped_polygon.is_empty:
-                                            boxes.append((class_id, clipped_polygon))
-                                    except (shapely.errors.GEOSException, ValueError) as e:
-                                        print(f"Warning: Failed to process polygon in {image_path.name}: {e}")
-                                        continue
-                            except Exception as e:
-                                print(f"Warning: Invalid polygon in {image_path.name}: {e}")
-                                continue
-                    except Exception as e:
-                        print(f"Warning: Failed to process line in {label_path}: {e}")
-                        continue
+                        except Exception as e:
+                            print(f"Warning: Invalid polygon in {image_path.name}: {e}")
+                            continue
+                        
+                except Exception as e:
+                    print(f"Warning: Failed to process line in {label_path}: {e}")
+                    continue
 
             # Calculate tile positions
             effective_areas = self._calculate_tile_positions((effective_width, effective_height))
@@ -572,8 +641,11 @@ class YoloTiler:
 
                 tile_labels = []
 
-                # Process annotations for this tile
+                # Process annotations for this tile (boxes or polygons)
                 for box_class, box_polygon in boxes:
+                    # Deal with intersections if they occur
+                    # This is necessary for cases where a box / polygon
+                    # is split across tiles
                     if tile_polygon.intersects(box_polygon):
                         intersection = tile_polygon.intersection(box_polygon)
 
@@ -612,15 +684,26 @@ class YoloTiler:
             tile_data: Numpy array of tile image
             image_path: Path to original image
             suffix: Suffix for the tile filename
-            folder: Subfolder name (train, valid, test)
+            folder: Subfolder name (train, val/id, test)
         """
-        # Set the save directory
-        save_dir = self.target / folder
+        # Set the save directory based on annotation type
+        if self.annotation_type == "image_classification":
+            # For image classification, the directory includes the class category (already validated)
+            # Extract class from original path (assuming structure: source/train/class/image.jpg)
+            class_name = image_path.parent.name
+            save_dir = self.target / folder / class_name
+            image_path_out = save_dir / image_path.name.replace(self.config.input_ext, suffix)
+        else:
+            # For object detection/segmentation
+            save_dir = self.target / folder / "images"
+            image_path_out = save_dir / image_path.name.replace(self.config.input_ext, suffix)
+
+        # Make sure the directory exists
+        save_dir.mkdir(parents=True, exist_ok=True)
 
         # Save the image
-        image_path = save_dir / "images" / image_path.name.replace(self.config.input_ext, suffix)
         with rasterio.open(
-            image_path,
+            image_path_out,
             'w',
             driver='GTiff',
             height=tile_data.shape[1],
@@ -629,7 +712,6 @@ class YoloTiler:
             dtype=tile_data.dtype
         ) as dst:
             dst.write(tile_data)
-        # self.logger.info(f"Saved tile to {image_path}")
 
     def _save_tile_labels(self, labels: Optional[List], image_path: Path, suffix: str, folder: str) -> None:
         """
@@ -644,8 +726,11 @@ class YoloTiler:
         # Save the labels in the appropriate directory
         label_path = self.target / folder / "labels" / image_path.name.replace(self.config.input_ext, suffix)
         label_path = label_path.with_suffix('.txt')
-        is_segmentation = self.config.annotation_type == "instance_segmentation"
-        self._save_labels(labels, label_path, is_segmentation)
+        
+        if self.annotation_type != "image_classification":
+            self._save_labels(labels, 
+                              label_path, 
+                              is_segmentation=self.annotation_type == "instance_segmentation")
 
     def _save_tile(self,
                    tile_data: np.ndarray,
@@ -664,13 +749,23 @@ class YoloTiler:
             folder: Subfolder name (train, valid, test)
         """
         self._save_tile_image(tile_data, original_path, suffix, folder)
-        self._save_tile_labels(labels, original_path, suffix, folder)
+        
+        # Only save label files for object detection and instance segmentation
+        if self.annotation_type != "image_classification":
+            self._save_tile_labels(labels, original_path, suffix, folder)
 
     def split_data(self) -> None:
         """
         Split train data into train, valid, and test sets using specified ratios.
         Files are moved from train to valid/test directories.
         """
+        if self.annotation_type == "image_classification":
+            self._split_classification_data()
+        else:
+            self._split_detection_data()
+
+    def _split_detection_data(self) -> None:
+        """Split data for object detection and instance segmentation"""
         train_images = list((self.target / 'train' / 'images').glob(f'*{self.config.output_ext}'))
         train_labels = list((self.target / 'train' / 'labels').glob('*.txt'))
 
@@ -680,15 +775,13 @@ class YoloTiler:
 
         combined = list(zip(train_images, train_labels))
         random.shuffle(combined)
-        train_images, train_labels = zip(*combined)
 
-        num_train = int(len(train_images) * self.config.train_ratio)
-        num_valid = int(len(train_images) * self.config.valid_ratio)
+        num_train = int(len(combined) * self.config.train_ratio)
+        num_valid = int(len(combined) * self.config.valid_ratio)
 
         valid_set = combined[num_train:num_train + num_valid]
         test_set = combined[num_train + num_valid:]
-        num_test = len(test_set)
-
+        
         # Move files to valid folder
         for image_idx, (image_path, label_path) in enumerate(valid_set):
             self._move_split_data(image_path, label_path, 'valid')
@@ -700,7 +793,7 @@ class YoloTiler:
                     current_set_name='valid',
                     current_image_name=image_path.name,
                     current_image_idx=image_idx + 1,
-                    total_images=num_valid  
+                    total_images=len(valid_set)
                 )
                 self.progress_callback(progress)
 
@@ -714,9 +807,82 @@ class YoloTiler:
                     current_set_name='test',
                     current_image_name=image_path.name,
                     current_image_idx=image_idx + 1,
-                    total_images=num_test
+                    total_images=len(test_set)
                 )
                 self.progress_callback(progress)
+
+    def _split_classification_data(self) -> None:
+        """Split data for image classification"""
+        # Get all class directories in train folder
+        train_class_dirs = [d for d in (self.target / 'train').iterdir() if d.is_dir()]
+        
+        if not train_class_dirs:
+            self.logger.warning("No class directories found in train folder")
+            return
+        
+        # Process each class to maintain class distribution
+        for class_dir in train_class_dirs:
+            class_name = class_dir.name
+            images = list(class_dir.glob(f'*{self.config.output_ext}'))
+            
+            if not images:
+                continue
+                
+            # Shuffle images for this class
+            random.shuffle(images)
+            
+            num_train = int(len(images) * self.config.train_ratio)
+            num_valid = int(len(images) * self.config.valid_ratio)
+            
+            valid_set = images[num_train:num_train + num_valid]
+            test_set = images[num_train + num_valid:]
+            
+            # Move files to val folder for this class (YOLO uses 'val' not 'valid' for classification)
+            for image_idx, image_path in enumerate(valid_set):
+                self._move_classification_image(image_path, class_name, 'val')
+                
+                if self.progress_callback:
+                    progress = TileProgress(
+                        current_tile_idx=0,
+                        total_tiles=0,
+                        current_set_name='val',
+                        current_image_name=image_path.name,
+                        current_image_idx=image_idx + 1,
+                        total_images=len(valid_set)
+                    )
+                    self.progress_callback(progress)
+            
+            # Move files to test folder for this class
+            for image_idx, image_path in enumerate(test_set):
+                self._move_classification_image(image_path, class_name, 'test')
+                
+                if self.progress_callback:
+                    progress = TileProgress(
+                        current_tile_idx=0,
+                        total_tiles=0,
+                        current_set_name='test',
+                        current_image_name=image_path.name,
+                        current_image_idx=image_idx + 1,
+                        total_images=len(test_set)
+                    )
+                    self.progress_callback(progress)
+
+    def _move_classification_image(self, image_path: Path, class_name: str, folder: str) -> None:
+        """
+        Move classification image to appropriate class folder.
+        
+        Args:
+            image_path: Path to image file
+            class_name: Class name (folder name)
+            folder: Target folder (val or test)
+        """
+        # Ensure target class directory exists
+        target_class_dir = self.target / folder / class_name
+        target_class_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Move the image
+        target_image = target_class_dir / image_path.name
+        image_path.rename(target_image)
 
     def _move_split_data(self, image_path: Path, label_path: Path, folder: str) -> None:
         """
@@ -740,8 +906,14 @@ class YoloTiler:
 
     def _process_subfolder(self, subfolder: str) -> None:
         """Process images and labels in a subfolder."""
-        image_paths = list((self.source / subfolder / 'images').glob(f'*{self.config.input_ext}'))
-        label_paths = list((self.source / subfolder / 'labels').glob('*.txt'))
+        
+        if self.annotation_type == 'image_classification':
+            image_paths = list((self.source / subfolder).glob(f'**/*{self.config.input_ext}'))
+            label_paths = [image_path.parent.name for image_path in image_paths]
+        else:
+            # Object detection and instance segmentation (get the images and labels in subfolders)
+            image_paths = list((self.source / subfolder / 'images').glob(f'*{self.config.input_ext}'))
+            label_paths = list((self.source / subfolder / 'labels').glob('*.txt'))
 
         # Log the number of images, labels found
         self.logger.info(f'Found {len(image_paths)} images in {subfolder} directory')
@@ -759,34 +931,49 @@ class YoloTiler:
 
         # Process each image
         for current_image_idx, (image_path, label_path) in enumerate(zip(image_paths, label_paths)):
-            assert image_path.stem == label_path.stem, "Image and label filenames do not match"
+            if self.annotation_type != "image_classification":
+                if image_path.stem != label_path.stem:
+                    raise ValueError(f"Image and label file names do not match: {image_path.name}, {label_path.name}")
+            
             self.logger.info(f'Processing {image_path}')
             self.tile_image(image_path, label_path, subfolder, current_image_idx + 1, total_images)
 
     def _check_and_split_data(self) -> None:
         """Check if valid or test folders are empty and split data if necessary."""
-        valid_images = list((self.target / 'valid' / 'images').glob(f'*{self.config.output_ext}'))
-        test_images = list((self.target / 'test' / 'images').glob(f'*{self.config.output_ext}'))
+        if self.annotation_type == "image_classification":
+            # Check if val or test folders are empty
+            val_empty = not any((self.target / 'val').glob(f'**/*{self.config.output_ext}'))
+            test_empty = not any((self.target / 'test').glob(f'**/*{self.config.output_ext}'))
+            
+            if val_empty or test_empty:
+                self.split_data()
+                self.logger.info('Split train data into val and test sets')
+        else:
+            # For detection/segmentation
+            valid_images = list((self.target / 'valid' / 'images').glob(f'*{self.config.output_ext}'))
+            test_images = list((self.target / 'test' / 'images').glob(f'*{self.config.output_ext}'))
 
-        if not valid_images or not test_images:
-            self.split_data()
-            self.logger.info('Split train data into valid and test sets')
+            if not valid_images or not test_images:
+                self.split_data()
+                self.logger.info('Split train data into valid and test sets')
 
     def _copy_and_update_data_yaml(self) -> None:
         """Copy and update data.yaml with new paths for tiled dataset."""
-        data_yaml = self.source / 'data.yaml'
-        if data_yaml.exists():
-            with open(data_yaml, 'r') as f:
-                data = f.read()
+        
+        if self.annotation_type != "image_classification":
+            data_yaml = self.source / 'data.yaml'
+            if data_yaml.exists():
+                with open(data_yaml, 'r') as f:
+                    data = f.read()
 
-            data = data.replace('../train/images', str(self.target / 'train' / 'images'))
-            data = data.replace('../valid/images', str(self.target / 'valid' / 'images'))
-            data = data.replace('../test/images', str(self.target / 'test' / 'images'))
+                data = data.replace('../train/images', str(self.target / 'train' / 'images'))
+                data = data.replace('../valid/images', str(self.target / 'valid' / 'images'))
+                data = data.replace('../test/images', str(self.target / 'test' / 'images'))
 
-            with open(self.target / 'data.yaml', 'w') as f:
-                f.write(data)
-        else:
-            self.logger.warning('data.yaml not found in source directory')
+                with open(self.target / 'data.yaml', 'w') as f:
+                    f.write(data)
+            else:
+                self.logger.warning('data.yaml not found in source directory')
 
     def visualize_random_samples(self) -> None:
         """
@@ -795,27 +982,37 @@ class YoloTiler:
         if self.num_viz_samples <= 0:
             return
 
-        # Get all image paths from train folder
-        train_image_dir = self.target / 'train' / 'images'
-        train_label_dir = self.target / 'train' / 'labels'
-
-        image_paths = list(train_image_dir.glob(f'*{self.config.output_ext}'))
+        if self.annotation_type == "image_classification":
+            # Get all class directories in train folder
+            train_dir = self.target / 'train'
+            image_paths = list(train_dir.glob(f'**/*{self.config.output_ext}'))
+                
+        else:
+            # Original code for object detection and instance segmentation
+            train_image_dir = self.target / 'train' / 'images'
+            train_label_dir = self.target / 'train' / 'labels'
+            image_paths = list(train_image_dir.glob(f'*{self.config.output_ext}'))
 
         if not image_paths:
             self.logger.warning("No images found in train folder for visualization")
             return
-
+    
         # Select random samples
         num_samples = min(self.num_viz_samples, len(image_paths))
         selected_images = random.sample(image_paths, num_samples)
 
         # Process each selected image
         for image_idx, image_path in enumerate(selected_images):
-            label_path = train_label_dir / f"{image_path.stem}.txt"
+            
+            if self.annotation_type == "image_classification":
+                label_path = image_path.parent.name  # Class name
+            else:
+                # For object detection and instance segmentation
+                label_path = train_label_dir / f"{image_path.stem}.txt"
 
-            if not label_path.exists():
-                self.logger.warning(f"Label file not found for {image_path.name}")
-                continue
+                if not label_path.exists():
+                    self.logger.warning(f"Label file not found for {image_path.name}")
+                    continue
 
             if self.progress_callback:
                 progress = TileProgress(
@@ -830,13 +1027,15 @@ class YoloTiler:
 
             self._render_single_sample(image_path, label_path, image_idx + 1)
 
-    def _render_single_sample(self, image_path: Path, label_path: Path, idx: int) -> None:
+    def _render_single_sample(self, image_path: Path, 
+                              label_path: Union[Path, str],  # Path to labels.txt, or class name
+                              idx: int) -> None:
         """
         Render a single sample with its annotations.
 
         Args:
             image_path: Path to the image file
-            label_path: Path to the label file
+            label_path: Path to the label file, or class name for image classification
             idx: Index for the output filename
         """
         # Read image using OpenCV
@@ -857,67 +1056,76 @@ class YoloTiler:
         # Random colors for different classes
         np.random.seed(42)  # For consistent colors
         colors = np.random.rand(100, 3)  # Support up to 100 classes
+        
+        if self.annotation_type != "image_classification":
+            # Read and parse labels
+            with open(label_path) as f:
+                for line in f:
+                    parts = line.strip().split()
+                    class_id = int(parts[0])
+                    color = colors[class_id % len(colors)]
 
-        # Read and parse labels
-        with open(label_path) as f:
-            for line in f:
-                parts = line.strip().split()
-                class_id = int(parts[0])
-                color = colors[class_id % len(colors)]
+                    if self.config.annotation_type == "object_detection":
+                        # Parse bounding box
+                        x_center = float(parts[1]) * width
+                        y_center = float(parts[2]) * height
+                        box_w = float(parts[3]) * width
+                        box_h = float(parts[4]) * height
 
-                if self.config.annotation_type == "object_detection":
-                    # Parse bounding box
-                    x_center = float(parts[1]) * width
-                    y_center = float(parts[2]) * height
-                    box_w = float(parts[3]) * width
-                    box_h = float(parts[4]) * height
+                        # Calculate box coordinates
+                        x = x_center - box_w / 2
+                        y = y_center - box_h / 2
 
-                    # Calculate box coordinates
-                    x = x_center - box_w / 2
-                    y = y_center - box_h / 2
+                        # Create rectangle patch with transparency
+                        rect = patches.Rectangle(
+                            (x, y),
+                            box_w,
+                            box_h,
+                            linewidth=2,
+                            edgecolor=color,
+                            facecolor=color,
+                            alpha=0.3  # Add transparency
+                        )
+                        ax.add_patch(rect)
+                        
+                    else:  # instance segmentation
+                        # Parse polygon coordinates
+                        coords = []
+                        for i in range(1, len(parts), 2):
+                            x = float(parts[i]) * width
+                            y = float(parts[i + 1]) * height
+                            coords.append([x, y])
 
-                    # Create rectangle patch with transparency
-                    rect = patches.Rectangle(
-                        (x, y),
-                        box_w,
-                        box_h,
-                        linewidth=2,
-                        edgecolor=color,
-                        facecolor=color,
-                        alpha=0.3  # Add transparency
-                    )
-                    ax.add_patch(rect)
-
-                else:  # instance segmentation
-                    # Parse polygon coordinates
-                    coords = []
-                    for i in range(1, len(parts), 2):
-                        x = float(parts[i]) * width
-                        y = float(parts[i + 1]) * height
-                        coords.append([x, y])
-
-                    # Create polygon patch with transparency
-                    polygon = MplPolygon(
-                        coords,
-                        facecolor=color,
-                        edgecolor=color,
-                        linewidth=2,
-                        alpha=0.3  # Add transparency
-                    )
-                    ax.add_patch(polygon)
-
+                        # Create polygon patch with transparency
+                        polygon = MplPolygon(
+                            coords,
+                            facecolor=color,
+                            edgecolor=color,
+                            linewidth=2,
+                            alpha=0.3  # Add transparency
+                        )
+                        ax.add_patch(polygon)
+                        
+        else:  # Image classification
+            class_name = label_path
+            ax.text(0.5, 0.5, 
+                    class_name, 
+                    fontsize=12, 
+                    color='white', 
+                    backgroundcolor='black',
+                    ha='center')
+            
         # Remove axes
         ax.axis('off')
 
         # Adjust layout
+        plt.ioff()  # Turn off interactive mode
         plt.tight_layout()
 
         # Save the visualization
         output_path = self.render_dir / f"sample_{idx:03d}.jpg"
         plt.savefig(output_path, bbox_inches='tight', pad_inches=0, dpi=300)
-        plt.close()
-
-        # self.logger.info(f"Saved visualization to {output_path}")
+        plt.close(fig)  # Close the specific figure
 
     def run(self) -> None:
         """Run the complete tiling process"""
@@ -925,7 +1133,7 @@ class YoloTiler:
             # Validate directories
             self._validate_directories()
 
-            # Train, valid, test subfolders
+            # Train, val/id, test subfolders
             for subfolder in self.subfolders:
                 self._process_subfolder(subfolder)
 

@@ -28,7 +28,8 @@ def main():
                         help="Output image extension (default: same as input_ext)")
 
     parser.add_argument("--annotation_type", type=str, default="object_detection",
-                        help="Type of annotation")
+                        choices=["object_detection", "instance_segmentation", "image_classification"],
+                        help="Type of annotation [object_detection, instance_segmentation, image_classification]")
 
     parser.add_argument("--densify_factor", type=float, default=0.01,
                         help="Densify factor for segmentation")
