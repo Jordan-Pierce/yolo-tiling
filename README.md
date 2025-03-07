@@ -11,7 +11,7 @@
 </div>
 
 This module can cut images and corresponding labels from a YOLO dataset into tiles of specified size and create a
-new dataset based on these tiles. It supports both object detection and instance segmentation. Credit for the original
+new dataset based on these tiles. It supports object detection, instance segmentation, and image classification. Credit for the original
 repository goes to [slanj](https://github.com/slanj/yolo-tiling).
 
 ## Installation
@@ -52,6 +52,7 @@ config = TileConfig(
     # Type of YOLO annotations to process:
     # - "object_detection": Standard YOLO format (class, x, y, width, height)
     # - "instance_segmentation": YOLO segmentation format (class, x1, y1, x2, y2, ...)
+    # - "image_classification": YOLO classification format (class)
     annotation_type="instance_segmentation",
 
     # For segmentation only: Controls point density along polygon edges
@@ -83,7 +84,7 @@ tiler = YoloTiler(
     target=dst,
     config=config,
     num_viz_samples=15,                     # Number of samples to visualize
-    show_processing_status=True             # Show the progress of the tiling process
+    show_processing_status=True,            # Show the progress of the tiling process
     progress_callback=progress_callback     # Optional callback function to report progress (see below)
 )
 

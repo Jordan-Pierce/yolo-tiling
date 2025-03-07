@@ -505,6 +505,9 @@ class YoloTiler:
                                 clipped_box = box_polygon.intersection(effective_area)
                                 if not clipped_box.is_empty:
                                     boxes.append((class_id, clipped_box))
+                        elif self.config.annotation_type == "image_classification":
+                            # For image classification, just add the class_id
+                            boxes.append((class_id, None))
                         else:
                             # Instance segmentation
                             points = []
@@ -574,7 +577,10 @@ class YoloTiler:
 
                 # Process annotations for this tile
                 for box_class, box_polygon in boxes:
-                    if tile_polygon.intersects(box_polygon):
+                    if self.config.annotation_type == "image_classification":
+                        # For image classification, just add the class_id
+                        tile_labels.append([box_class])
+                    elif tile_polygon.intersects(box_polygon):
                         intersection = tile_polygon.intersection(box_polygon)
 
                         if self.config.annotation_type == "object_detection":
@@ -645,7 +651,13 @@ class YoloTiler:
         label_path = self.target / folder / "labels" / image_path.name.replace(self.config.input_ext, suffix)
         label_path = label_path.with_suffix('.txt')
         is_segmentation = self.config.annotation_type == "instance_segmentation"
-        self._save_labels(labels, label_path, is_segmentation)
+        is_classification = self.config.annotation_type == "image_classification"
+        if is_classification:
+            with open(label_path, 'w') as f:
+                for label_class in labels:
+                    f.write(f"{label_class[0]}\n")
+        else:
+            self._save_labels(labels, label_path, is_segmentation)
 
     def _save_tile(self,
                    tile_data: np.ndarray,
@@ -887,6 +899,10 @@ class YoloTiler:
                         alpha=0.3  # Add transparency
                     )
                     ax.add_patch(rect)
+
+                elif self.config.annotation_type == "image_classification":
+                    # For image classification, just add the class_id as text
+                    ax.text(10, 10, f"Class: {class_id}", color=color, fontsize=12, bbox=dict(facecolor='white', alpha=0.5))
 
                 else:  # instance segmentation
                     # Parse polygon coordinates
