@@ -125,6 +125,9 @@ def progress_callback(progress: TileProgress):
 - The tiler **requires** a YOLO dataset structure within the source directory (see below). 
 - If only a `train` folder exists, the train / valid / test ratios will be used to split the tiled `train` folder.
 - If there already exists train / valid/ test folders in the source directory, the ratios are ignored.
+- Note the differences between `valid` and `val` folder for different tasks.
+
+#### Object Detection and Instance Segmentation
 
 ```bash
 dataset/
@@ -138,6 +141,21 @@ dataset/
 │   ├── images/
 │   └── labels/
 └── data.yaml  # Optional
+```
+
+#### Image Classification
+
+```bash
+dataset/
+├── train/
+│   ├── class_1/
+│   └── class_2/
+├── val/
+│   ├── class_1/
+│   └── class_2/
+├── test/
+    ├── class_1/
+    └── class_2/
 ```
 
 ### Test Data
