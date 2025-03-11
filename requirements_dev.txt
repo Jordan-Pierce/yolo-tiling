@@ -27,3 +27,4 @@ mkdocstrings-crystal
 mkdocstrings-python-legacy
 pygments
 pymdown-extensions
+

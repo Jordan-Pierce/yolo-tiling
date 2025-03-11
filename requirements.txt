@@ -5,4 +5,4 @@ Shapely
 rasterio
 opencv-python
 matplotlib
-yaml
+PyYAML
