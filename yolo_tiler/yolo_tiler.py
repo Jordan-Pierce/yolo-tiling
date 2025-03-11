@@ -959,19 +959,28 @@ class YoloTiler:
 
     def _copy_and_update_data_yaml(self) -> None:
         """Copy and update data.yaml with new paths for tiled dataset."""
-        
         if self.annotation_type != "image_classification":
             data_yaml = self.source / 'data.yaml'
             if data_yaml.exists():
+                import yaml
+                
+                # Read YAML as structured data
                 with open(data_yaml, 'r') as f:
-                    data = f.read()
-
-                data = data.replace('../train/images', str(self.target / 'train' / 'images'))
-                data = data.replace('../valid/images', str(self.target / 'valid' / 'images'))
-                data = data.replace('../test/images', str(self.target / 'test' / 'images'))
-
+                    data = yaml.safe_load(f)
+                
+                # Update paths
+                if 'train' in data:
+                    data['train'] = str(self.target / 'train' / 'images')
+                if 'val' in data:
+                    data['val'] = str(self.target / 'valid' / 'images')
+                if 'valid' in data:
+                    data['valid'] = str(self.target / 'valid' / 'images')
+                if 'test' in data:
+                    data['test'] = str(self.target / 'test' / 'images')
+                
+                # Write updated YAML
                 with open(self.target / 'data.yaml', 'w') as f:
-                    f.write(data)
+                    yaml.dump(data, f, sort_keys=False)
             else:
                 self.logger.warning('data.yaml not found in source directory')
 
