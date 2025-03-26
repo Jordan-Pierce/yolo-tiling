@@ -1,14 +1,12 @@
 import logging
 import math
 import yaml
-import glob
 import random
 import warnings
 from tqdm import tqdm
 
 from dataclasses import dataclass
 from pathlib import Path
-from shutil import copyfile
 from typing import List, Tuple, Optional, Union, Generator, Callable
 
 import cv2
@@ -963,7 +961,6 @@ class YoloTiler:
         if self.annotation_type != "image_classification":
             data_yaml = self.source / 'data.yaml'
             if data_yaml.exists():
-                import yaml
                 
                 # Read YAML as structured data
                 with open(data_yaml, 'r') as f:
@@ -987,66 +984,106 @@ class YoloTiler:
 
     def visualize_random_samples(self) -> None:
         """
-        Visualize random samples from the train folder with their annotations.
+        Visualize random samples from the original source images and their corresponding tiles.
+        This helps see how original images are divided into tiles.
         """
         if self.num_viz_samples <= 0:
             return
 
+        # Get images from source directory first
         if self.annotation_type == "image_classification":
             # Get all class directories in train folder
-            train_dir = self.target / 'train'
-            image_paths = list(train_dir.glob(f'**/*{self.config.output_ext}'))
-                
+            train_dir = self.source / 'train'
+            source_image_paths = list(train_dir.glob(f'**/*{self.config.input_ext}'))
         else:
             # Original code for object detection and instance segmentation
-            train_image_dir = self.target / 'train' / 'images'
-            train_label_dir = self.target / 'train' / 'labels'
-            image_paths = list(train_image_dir.glob(f'*{self.config.output_ext}'))
+            train_image_dir = self.source / 'train' / 'images'
+            source_image_paths = list(train_image_dir.glob(f'*{self.config.input_ext}'))
 
-        if not image_paths:
-            self.logger.warning("No images found in train folder for visualization")
+        if not source_image_paths:
+            self.logger.warning("No images found in source train folder for visualization")
             return
-    
-        # Select random samples
-        num_samples = min(self.num_viz_samples, len(image_paths))
-        selected_images = random.sample(image_paths, num_samples)
-
-        # Process each selected image
-        for image_idx, image_path in enumerate(selected_images):
+        
+        # Select random samples from source
+        num_samples = min(self.num_viz_samples, len(source_image_paths))
+        selected_source_images = random.sample(source_image_paths, num_samples)
+        
+        # Process each selected source image
+        for image_idx, source_image_path in enumerate(selected_source_images):
+            # Find all tiles derived from this source image
+            base_name = source_image_path.stem
             
             if self.annotation_type == "image_classification":
-                label_path = image_path.parent.name  # Class name
+                # For image classification
+                class_name = source_image_path.parent.name
+                target_train_dir = self.target / 'train' / class_name
+                tiles = list(target_train_dir.glob(f"{base_name}*_tile_*{self.config.output_ext}"))
             else:
                 # For object detection and instance segmentation
-                label_path = train_label_dir / f"{image_path.stem}.txt"
-
-                if not label_path.exists():
-                    self.logger.warning(f"Label file not found for {image_path.name}")
+                target_train_dir = self.target / 'train' / 'images'
+                tiles = list(target_train_dir.glob(f"{base_name}*_tile_*{self.config.output_ext}"))
+                
+            if not tiles:
+                self.logger.warning(f"No tiles found for source image {source_image_path.name}")
+                continue
+                
+            # Render source image first
+            if self.annotation_type == "image_classification":
+                source_label = source_image_path.parent.name  # Class name
+            else:
+                # For object detection and instance segmentation
+                source_label_path = source_image_path.parent.parent / 'labels' / f"{source_image_path.stem}.txt"
+                if not source_label_path.exists():
+                    self.logger.warning(f"Label file not found for source {source_image_path.name}")
                     continue
+                
+            # Either the class category or the label file path 
+            label_path = source_label if self.annotation_type == "image_classification" else source_label_path
+            # Render the source image
+            self._render_single_sample(source_image_path, 
+                                       label_path,
+                                       f"{image_idx+1:03d}_source")
+            
+            # Render each tile
+            for tile_idx, tile_path in enumerate(tiles):
+                if self.annotation_type == "image_classification":
+                    tile_label = tile_path.parent.name  # Class name
+                else:
+                    # For object detection and instance segmentation
+                    tile_label_path = self.target / 'train' / 'labels' / f"{tile_path.stem}.txt"
+                    if not tile_label_path.exists():
+                        self.logger.warning(f"Label file not found for tile {tile_path.name}")
+                        continue
+                
+                # Update progress
+                if self.progress_callback:
+                    progress = TileProgress(
+                        current_tile_idx=tile_idx + 1,
+                        total_tiles=len(tiles),
+                        current_set_name=f'rendered (image {image_idx+1}/{num_samples})',
+                        current_image_name=source_image_path.name,
+                        current_image_idx=image_idx + 1,
+                        total_images=num_samples
+                    )
+                    self.progress_callback(progress)
 
-            if self.progress_callback:
-                progress = TileProgress(
-                    current_tile_idx=0,
-                    total_tiles=0,
-                    current_set_name='rendered',
-                    current_image_name=image_path.name,
-                    current_image_idx=image_idx + 1,
-                    total_images=len(selected_images)
-                )
-                self.progress_callback(progress)
-
-            self._render_single_sample(image_path, label_path, image_idx + 1)
-
+                # Either the class category or the label file path 
+                label_path = tile_label if self.annotation_type == "image_classification" else tile_label_path
+                # Render the tile
+                self._render_single_sample(tile_path, 
+                                           label_path, 
+                                           f"{image_idx+1:03d}_tile_{tile_idx+1:03d}")
+            
     def _render_single_sample(self, image_path: Path, 
                               label_path: Union[Path, str],  # Path to labels.txt, or class name
-                              idx: int) -> None:
+                              idx: Union[str, int]) -> None:
         """
         Render a single sample with its annotations.
 
         Args:
             image_path: Path to the image file
             label_path: Path to the label file, or class name for image classification
-            idx: Index for the output filename
+            idx: Index or identifier for the output filename
         """
         # Read image using OpenCV
         img = cv2.imread(str(image_path))
@@ -1062,6 +1099,11 @@ class YoloTiler:
         # Create figure and axis
         fig, ax = plt.subplots(1)
         ax.imshow(img)
+
+        # Add image filename as figure title
+        is_source = "source" in str(idx)
+        title = f"{'Source: ' if is_source else 'Tile: '}{image_path.name}"
+        fig.suptitle(title, fontsize=10)
 
         # Random colors for different classes
         np.random.seed(42)  # For consistent colors
@@ -1118,7 +1160,7 @@ class YoloTiler:
                         
         else:  # Image classification
             class_name = label_path
-            ax.text(0.5, 0.5, 
+            ax.text(width / 2, height / 2, 
                     class_name, 
                     fontsize=12, 
                     color='white', 
@@ -1133,8 +1175,8 @@ class YoloTiler:
         plt.tight_layout()
 
         # Save the visualization
-        output_path = self.render_dir / f"sample_{idx:03d}.jpg"
-        plt.savefig(output_path, bbox_inches='tight', pad_inches=0, dpi=300)
+        output_path = self.render_dir / f"sample_{idx}.jpg"
+        plt.savefig(output_path, bbox_inches='tight', pad_inches=0.1, dpi=300)
         plt.close(fig)  # Close the specific figure
 
     def run(self) -> None:
