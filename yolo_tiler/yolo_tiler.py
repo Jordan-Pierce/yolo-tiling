@@ -10,13 +10,14 @@ from pathlib import Path
 from typing import List, Tuple, Optional, Union, Generator, Callable
 
 import cv2
-import shapely
-import matplotlib.patches as patches
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import rasterio
 
+import shapely
+import matplotlib.pyplot as plt
+
+import matplotlib.patches as patches
 from matplotlib.patches import Polygon as MplPolygon
 from rasterio.windows import Window
 from shapely.geometry import Polygon, MultiPolygon
@@ -225,10 +226,6 @@ class YoloTiler:
         """Configure logging for the tiler"""
         logger = logging.getLogger('YoloTiler')
         logger.setLevel(logging.INFO)
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
         return logger
 
     def _create_target_folder(self, target: Path) -> None:
@@ -672,8 +669,11 @@ class YoloTiler:
 
                 # Save tile image and labels if include_negative_samples is True or there are labels
                 if self.config.include_negative_samples or tile_labels:
-                    tile_suffix = f'_tile_{tile_idx}{self.config.output_ext}'
-                    self._save_tile(tile_data, image_path, tile_suffix, tile_labels, folder)
+                    # Calculate width and height for the new naming convention
+                    tile_width = abs_x2 - abs_x1
+                    tile_height = abs_y2 - abs_y1
+                    tile_coords = (abs_x1, abs_y1, tile_width, tile_height)
+                    self._save_tile(tile_data, image_path, tile_coords, tile_labels, folder)
 
     def _save_tile_image(self, tile_data: np.ndarray, image_path: Path, suffix: str, folder: str) -> None:
         """
@@ -734,7 +734,7 @@ class YoloTiler:
     def _save_tile(self,
                    tile_data: np.ndarray,
                    original_path: Path,
-                   suffix: str,
+                   tile_coords: Tuple[int, int, int, int],
                    labels: Optional[List],
                    folder: str) -> None:
         """
@@ -743,10 +743,14 @@ class YoloTiler:
         Args:
             tile_data: Numpy array of tile image
             original_path: Path to original image
-            suffix: Suffix for the tile filename
+            tile_coords: Tuple of (x1, y1, width, height) for the tile
             labels: List of labels for the tile
             folder: Subfolder name (train, valid, test)
         """
+        # Create suffix with coordinates: _x_y_width_height
+        x1, y1, width, height = tile_coords
+        suffix = f'_{x1}_{y1}_{width}_{height}{self.config.output_ext}'
+        
         self._save_tile_image(tile_data, original_path, suffix, folder)
         
         # Only save label files for object detection and instance segmentation
@@ -1017,11 +1021,11 @@ class YoloTiler:
                 # For image classification
                 class_name = source_image_path.parent.name
                 target_train_dir = self.target / 'train' / class_name
-                tiles = list(target_train_dir.glob(f"{base_name}*_tile_*{self.config.output_ext}"))
+                tiles = list(target_train_dir.glob(f"{base_name}_*_*_*_*{self.config.output_ext}"))
             else:
                 # For object detection and instance segmentation
                 target_train_dir = self.target / 'train' / 'images'
-                tiles = list(target_train_dir.glob(f"{base_name}*_tile_*{self.config.output_ext}"))
+                tiles = list(target_train_dir.glob(f"{base_name}_*_*_*_*{self.config.output_ext}"))
                 
             if not tiles:
                 self.logger.warning(f"No tiles found for source image {source_image_path.name}")
@@ -1067,12 +1071,23 @@ class YoloTiler:
                     )
                     self.progress_callback(progress)
 
+                # Extract coordinates from filename for better visualization naming
+                try:
+                    # Parse coordinates from the filename (format: name_x_y_width_height.ext)
+                    parts = tile_path.stem.split('_')
+                    x = parts[-4]
+                    y = parts[-3]
+                    render_id = f"{image_idx+1:03d}_tile_x{x}_y{y}_{tile_idx+1:03d}"
+                except (IndexError, ValueError):
+                    # Fallback if parsing fails
+                    render_id = f"{image_idx+1:03d}_tile_{tile_idx+1:03d}"
+                
                 # Either the class category or the label file path 
                 label_path = tile_label if self.annotation_type == "image_classification" else tile_label_path
                 # Render the tile
                 self._render_single_sample(tile_path, 
                                            label_path, 
-                                           f"{image_idx+1:03d}_tile_{tile_idx+1:03d}")
+                                           render_id)
             
     def _render_single_sample(self, image_path: Path, 
                               label_path: Union[Path, str],  # Path to labels.txt, or class name
@@ -1175,7 +1190,7 @@ class YoloTiler:
         plt.tight_layout()
 
         # Save the visualization
-        output_path = self.render_dir / f"sample_{idx}.jpg"
+        output_path = self.render_dir / image_path.name
         plt.savefig(output_path, bbox_inches='tight', pad_inches=0.1, dpi=300)
         plt.close(fig)  # Close the specific figure
 

@@ -51,7 +51,7 @@ if test_detection:
         source=src_detection,
         target=dst_detection,
         config=config_detection,
-        num_viz_samples=25,
+        num_viz_samples=5,
         progress_callback=progress_callback
     )
 
@@ -81,7 +81,7 @@ if test_classification:
         source=src_classification,
         target=dst_classification,
         config=config_classification,
-        num_viz_samples=25,
+        num_viz_samples=5,
         progress_callback=progress_callback
     )
 
@@ -111,7 +111,7 @@ if test_segmentation:
         source=src_segmentation,
         target=dst_segmentation,
         config=config_segmentation,
-        num_viz_samples=25,
+        num_viz_samples=5,
         progress_callback=progress_callback
     )
 

@@ -83,7 +83,7 @@ tiler = YoloTiler(
     source=src,
     target=dst,
     config=config,
-    num_viz_samples=15,                     # Number of samples to visualize
+    num_viz_samples=5,                      # Number of samples to visualize
     show_processing_status=True,            # Show the progress of the tiling process
     progress_callback=progress_callback     # Optional callback function to report progress (see below)
 )

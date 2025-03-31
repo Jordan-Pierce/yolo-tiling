@@ -46,7 +46,7 @@ def main():
     parser.add_argument("--test_ratio", type=float, default=0.1,
                         help="Test split ratio")
     
-    parser.add_argument("--num_viz_samples", type=int, default=15,
+    parser.add_argument("--num_viz_samples", type=int, default=5,
                         help="Number of visualization samples")
 
     args = parser.parse_args()
