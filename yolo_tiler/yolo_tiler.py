@@ -1158,20 +1158,28 @@ class YoloTiler:
                     else:  # instance segmentation
                         # Parse polygon coordinates
                         coords = []
-                        for i in range(1, len(parts), 2):
-                            x = float(parts[i]) * width
-                            y = float(parts[i + 1]) * height
-                            coords.append([x, y])
+                        try:
+                            for i in range(1, len(parts), 2):
+                                if i + 1 < len(parts):  # Make sure y coordinate exists
+                                    x = float(parts[i]) * width
+                                    y = float(parts[i + 1]) * height
+                                    coords.append([x, y])
 
-                        # Create polygon patch with transparency
-                        polygon = MplPolygon(
-                            coords,
-                            facecolor=color,
-                            edgecolor=color,
-                            linewidth=2,
-                            alpha=0.3  # Add transparency
-                        )
-                        ax.add_patch(polygon)
+                            # Only create polygon if we have enough valid coordinates
+                            if len(coords) >= 3:  # Polygons need at least 3 points
+                                # Create polygon patch with transparency
+                                polygon = MplPolygon(
+                                    coords,
+                                    facecolor=color,
+                                    edgecolor=color,
+                                    linewidth=2,
+                                    alpha=0.3  # Add transparency
+                                )
+                                ax.add_patch(polygon)
+                            else:
+                                self.logger.warning(f"Polygon with insufficient coordinates in {image_path.name}")
+                        except Exception as e:
+                            self.logger.warning(f"Error creating polygon in {image_path.name}: {e}")
                         
         else:  # Image classification
             class_name = label_path
