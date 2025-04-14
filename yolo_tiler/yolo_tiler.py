@@ -780,7 +780,24 @@ class YoloTiler:
             self.logger.warning("No train data found to split")
             return
 
-        combined = list(zip(train_images, train_labels))
+        # Create a dictionary mapping from image stem to image path
+        image_dict = {img_path.stem: img_path for img_path in train_images}
+        
+        # Create a dictionary mapping from label stem to label path
+        label_dict = {lbl_path.stem: lbl_path for lbl_path in train_labels}
+        
+        # Create properly matched image-label pairs
+        combined = []
+        for stem, img_path in image_dict.items():
+            if stem in label_dict:
+                combined.append((img_path, label_dict[stem]))
+            else:
+                self.logger.warning(f"No matching label found for image: {img_path.name}, skipping")
+        
+        if not combined:
+            self.logger.warning("No matching image-label pairs found to split")
+            return
+                
         random.shuffle(combined)
 
         num_train = int(len(combined) * self.config.train_ratio)
@@ -921,6 +938,14 @@ class YoloTiler:
             # Object detection and instance segmentation (get the images and labels in subfolders)
             image_paths = list((self.source / subfolder / 'images').glob(f'*{self.config.input_ext}'))
             label_paths = list((self.source / subfolder / 'labels').glob('*.txt'))
+            
+            # Sort paths to ensure consistent ordering
+            image_paths.sort()
+            label_paths.sort()
+            
+            # For object detection/segmentation, create a mapping of stem to label path
+            # This ensures correct matching regardless of directory listing order
+            label_dict = {path.stem: path for path in label_paths}
 
         # Log the number of images, labels found
         self.logger.info(f'Found {len(image_paths)} images in {subfolder} directory')
@@ -937,10 +962,16 @@ class YoloTiler:
         total_images = len(image_paths)
 
         # Process each image
-        for current_image_idx, (image_path, label_path) in enumerate(zip(image_paths, label_paths)):
+        for current_image_idx, image_path in enumerate(image_paths):
             if self.annotation_type != "image_classification":
-                if image_path.stem != label_path.stem:
-                    raise ValueError(f"Image and label file names do not match: {image_path.name}, {label_path.name}")
+                # Look up the matching label path based on stem instead of position
+                label_path = label_dict.get(image_path.stem)
+                if label_path is None:
+                    self.logger.warning(f"No matching label found for image: {image_path.name}, skipping")
+                    continue
+            else:
+                # For classification, the label is still the parent folder name
+                label_path = image_path.parent.name
             
             self.logger.info(f'Processing {image_path}')
             self.tile_image(image_path, label_path, subfolder, current_image_idx + 1, total_images)
@@ -1285,3 +1316,4 @@ class YoloTiler:
         for pbar in self._progress_bars.values():
             pbar.close()
         self._progress_bars.clear()
+
