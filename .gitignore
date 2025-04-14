@@ -107,6 +107,6 @@ ENV/
 .vscode/
 .idea/
 
-tests/detection_*
-tests/segmentation_*
-test/classification_*
+tests/detection_tiled
+tests/segmentation_tiled
+tests/classification_tiled
