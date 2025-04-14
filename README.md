@@ -127,8 +127,10 @@ def progress_callback(progress: TileProgress):
 
 - The tiler **requires** a YOLO dataset structure within the source directory (see below). 
 - If only a `train` folder exists, the train / valid / test ratios will be used to split the tiled `train` folder.
-- If there already exists train / valid/ test folders in the source directory, the ratios are ignored.
-- Note the differences between `valid` and `val` folder for different tasks.
+- If there already exists train / valid / test folders in the source directory, the ratios are ignored.
+- Tiles are named as `basename_top-left_bottom-right_width_height.ext`.
+- `copy_source_data` will make copy the original YOLO dataset to the output folder (for multiscale).
+- Pay attention to the differences between the `valid` and `val` folder for different tasks.
 
 #### Object Detection and Instance Segmentation
 
