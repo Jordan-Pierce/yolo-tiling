@@ -28,22 +28,23 @@ test_detection = True
 test_classification = True
 test_segmentation = True
 
+
 if test_detection:
-    
     src_detection = "./tests/detection"
     dst_detection = "./tests/detection_tiled"
 
     config_detection = TileConfig(
-        slice_wh=(320, 240),  # Slice width and height
-        overlap_wh=(0.0, 0.0),  # Overlap width and height (10% overlap in this example, or 64x48 pixels)
+        slice_wh=(320, 240),             # Slice width and height
+        overlap_wh=(0.0, 0.0),           # Overlap width and height (10% overlap in this example, or 64x48 pixels)
         input_ext=".png",
         output_ext=None,
         annotation_type="object_detection",
         train_ratio=0.7,
         valid_ratio=0.2,
         test_ratio=0.1,
-        margins=(0, 0, 0, 0),  # Left, top, right, bottom
-        include_negative_samples=True  # Inlude negative samples
+        margins=(0, 0, 0, 0),            # Left, top, right, bottom
+        include_negative_samples=True,   # Inlude negative samples
+        copy_source_data=False,          # Copy original source data to target directory
     )
 
     # Create tiler with callback for object detection
@@ -58,22 +59,23 @@ if test_detection:
     # Run tiling process for object detection
     tiler_detection.run()
 
+
 if test_classification:
-    
     src_classification = "./tests/classification"
     dst_classification = "./tests/classification_tiled"
 
     config_classification = TileConfig(
-        slice_wh=(320, 240),  # Slice width and height
-        overlap_wh=(0.0, 0.0),  # Overlap width and height (10% overlap in this example, or 64x48 pixels)
+        slice_wh=(320, 240),            # Slice width and height
+        overlap_wh=(0.0, 0.0),          # Overlap width and height (10% overlap in this example, or 64x48 pixels)
         input_ext=".jpg",
         output_ext=None,
         annotation_type="image_classification",
         train_ratio=0.7,
         valid_ratio=0.2,
         test_ratio=0.1,
-        margins=(0, 0, 0, 0),  # Left, top, right, bottom
-        include_negative_samples=True  # Inlude negative samples
+        margins=(0, 0, 0, 0),           # Left, top, right, bottom
+        include_negative_samples=True,  # Inlude negative samples
+        copy_source_data=True,          # Copy original source data to target directory
     )
 
     # Create tiler with callback for image classification
@@ -88,22 +90,24 @@ if test_classification:
     # Run tiling process for image classification
     tiler_classification.run()
     
+    
 if test_segmentation:
-
     src_segmentation = "./tests/segmentation"
     dst_segmentation = "./tests/segmentation_tiled"
 
     config_segmentation = TileConfig(
-        slice_wh=(320, 240),  # Slice width and height
-        overlap_wh=(0.0, 0.0),  # Overlap width and height (10% overlap in this example, or 64x48 pixels)
+        slice_wh=(320, 240),            # Slice width and height
+        overlap_wh=(0.0, 0.0),          # Overlap width and height (10% overlap in this example, or 64x48 pixels)
         input_ext=".png",
         output_ext=None,
         annotation_type="instance_segmentation",
         train_ratio=0.7,
         valid_ratio=0.2,
         test_ratio=0.1,
-        margins=(0, 0, 0, 0),  # Left, top, right, bottom
-        include_negative_samples=True  # Inlude negative samples
+        margins=(0, 0, 0, 0),           # Left, top, right, bottom
+        include_negative_samples=True,  # Inlude negative samples
+        copy_source_data=False,         # Copy original source data to target directory
+
     )
 
     # Create tiler with callback for instance segmentation

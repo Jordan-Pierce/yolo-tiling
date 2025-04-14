@@ -2,6 +2,7 @@ import logging
 import math
 import yaml
 import random
+import shutil
 import warnings
 from tqdm import tqdm
 
@@ -44,7 +45,8 @@ class TileConfig:
                  valid_ratio: float = 0.1,
                  test_ratio: float = 0.1,
                  margins: Union[float, Tuple[float, float, float, float]] = 0.0,
-                 include_negative_samples: bool = True):
+                 include_negative_samples: bool = True,
+                 copy_source_data: bool = False):
         """
         Args:
             slice_wh: Size of each slice (width, height)
@@ -59,6 +61,7 @@ class TileConfig:
             test_ratio: Ratio of test set
             margins: Margins to exclude from tiling (left, top, right, bottom)
             include_negative_samples: Include tiles without annotations
+            copy_source_data: Copy original source images to target directory
         """
         self.slice_wh = slice_wh if isinstance(slice_wh, tuple) else (slice_wh, slice_wh)
         self.overlap_wh = overlap_wh
@@ -71,6 +74,7 @@ class TileConfig:
         self.valid_ratio = valid_ratio
         self.test_ratio = test_ratio
         self.include_negative_samples = include_negative_samples
+        self.copy_source_data = copy_source_data
         
         # Validate annoation type
         if self.annotation_type not in ["object_detection", "instance_segmentation", "image_classification"]:
@@ -985,6 +989,48 @@ class YoloTiler:
                     yaml.dump(data, f, sort_keys=False)
             else:
                 self.logger.warning('data.yaml not found in source directory')
+                
+    def _copy_source_data(self) -> None:
+        """Copy original source data to the target directory."""        
+        self.logger.info('Copying original source data to target directory...')
+        
+        for subfolder in self.subfolders:
+            if self.annotation_type == "image_classification":
+                # For image classification, copy all class directories
+                source_dir = self.source / subfolder
+                if source_dir.exists():
+                    # Get all class directories
+                    class_dirs = [d for d in source_dir.iterdir() if d.is_dir()]
+                    
+                    for class_dir in class_dirs:
+                        class_name = class_dir.name
+                        target_class_dir = self.target / f"{subfolder.rstrip('/')}" / class_name
+                        target_class_dir.mkdir(parents=True, exist_ok=True)
+                        
+                        # Copy all images for this class
+                        for img_path in class_dir.glob(f"*{self.config.input_ext}"):
+                            shutil.copy2(img_path, target_class_dir / img_path.name)
+            else:
+                # For object detection and instance segmentation
+                source_img_dir = self.source / subfolder / "images"
+                source_lbl_dir = self.source / subfolder / "labels"
+                
+                if source_img_dir.exists() and source_lbl_dir.exists():
+                    target_img_dir = self.target / f"{subfolder.rstrip('/')}" / "images"
+                    target_lbl_dir = self.target / f"{subfolder.rstrip('/')}" / "labels"
+                    
+                    target_img_dir.mkdir(parents=True, exist_ok=True)
+                    target_lbl_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    # Copy all images
+                    for img_path in source_img_dir.glob(f"*{self.config.input_ext}"):
+                        shutil.copy2(img_path, target_img_dir / img_path.name)
+                    
+                    # Copy all labels
+                    for lbl_path in source_lbl_dir.glob("*.txt"):
+                        shutil.copy2(lbl_path, target_lbl_dir / lbl_path.name)
+        
+        self.logger.info('Source data copied successfully')
 
     def visualize_random_samples(self) -> None:
         """
@@ -1219,6 +1265,10 @@ class YoloTiler:
 
             # Copy and update data.yaml with new paths
             self._copy_and_update_data_yaml()
+            
+            # Copy source data if requested
+            if self.config.copy_source_data:
+                self._copy_source_data()
 
             # Generate visualizations if requested
             if self.num_viz_samples > 0:

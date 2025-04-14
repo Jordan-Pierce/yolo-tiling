@@ -77,6 +77,9 @@ config = TileConfig(
 
     # Include negative samples (tiles without any instances)
     include_negative_samples=True
+
+    # Include source data (copied over)
+    copy_source_data=False
 )
 
 tiler = YoloTiler(

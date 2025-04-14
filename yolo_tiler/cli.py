@@ -49,6 +49,9 @@ def main():
     parser.add_argument("--num_viz_samples", type=int, default=5,
                         help="Number of visualization samples")
 
+    parser.add_argument("--copy_source_data", action="store_true", default=False,
+                        help="Copy original source data to target directory")
+    
     args = parser.parse_args()
     config = TileConfig(
         slice_wh=tuple(args.slice_wh),
@@ -60,7 +63,8 @@ def main():
         smoothing_tolerance=args.smoothing_tolerance,
         train_ratio=args.train_ratio,
         valid_ratio=args.valid_ratio,
-        test_ratio=args.test_ratio
+        test_ratio=args.test_ratio,
+        copy_source_data=args.copy_source_data
     )
     tiler = YoloTiler(
         source=args.source,
