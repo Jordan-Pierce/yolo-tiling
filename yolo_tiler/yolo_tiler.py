@@ -46,7 +46,8 @@ class TileConfig:
                  test_ratio: float = 0.1,
                  margins: Union[float, Tuple[float, float, float, float]] = 0.0,
                  include_negative_samples: bool = True,
-                 copy_source_data: bool = False):
+                 copy_source_data: bool = False,
+                 compression: int = 90):
         """
         Args:
             slice_wh: Size of each slice (width, height)
@@ -62,6 +63,7 @@ class TileConfig:
             margins: Margins to exclude from tiling (left, top, right, bottom)
             include_negative_samples: Include tiles without annotations
             copy_source_data: Copy original source images to target directory
+            compression: Compression percentage for JPEG/JPG output formats (0-100)
         """
         self.slice_wh = slice_wh if isinstance(slice_wh, tuple) else (slice_wh, slice_wh)
         self.overlap_wh = overlap_wh
@@ -75,6 +77,7 @@ class TileConfig:
         self.test_ratio = test_ratio
         self.include_negative_samples = include_negative_samples
         self.copy_source_data = copy_source_data
+        self.compression = compression
         
         # Validate annoation type
         if self.annotation_type not in ["object_detection", "instance_segmentation", "image_classification"]:
@@ -705,16 +708,19 @@ class YoloTiler:
         save_dir.mkdir(parents=True, exist_ok=True)
 
         # Save the image
-        with rasterio.open(
-            image_path_out,
-            'w',
-            driver='GTiff',
-            height=tile_data.shape[1],
-            width=tile_data.shape[2],
-            count=tile_data.shape[0],
-            dtype=tile_data.dtype
-        ) as dst:
-            dst.write(tile_data)
+        if self.config.output_ext.lower() in [".jpg", ".jpeg"]:
+            cv2.imwrite(str(image_path_out), cv2.cvtColor(tile_data.transpose(1, 2, 0), cv2.COLOR_RGB2BGR), [int(cv2.IMWRITE_JPEG_QUALITY), self.config.compression])
+        else:
+            with rasterio.open(
+                image_path_out,
+                'w',
+                driver='GTiff',
+                height=tile_data.shape[1],
+                width=tile_data.shape[2],
+                count=tile_data.shape[0],
+                dtype=tile_data.dtype
+            ) as dst:
+                dst.write(tile_data)
 
     def _save_tile_labels(self, labels: Optional[List], image_path: Path, suffix: str, folder: str) -> None:
         """
@@ -1316,4 +1322,3 @@ class YoloTiler:
         for pbar in self._progress_bars.values():
             pbar.close()
         self._progress_bars.clear()
-

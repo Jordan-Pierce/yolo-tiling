@@ -79,7 +79,10 @@ config = TileConfig(
     include_negative_samples=True
 
     # Include source data (copied over)
-    copy_source_data=False
+    copy_source_data=False,
+
+    # Compression percentage for JPEG/JPG output formats (0-100)
+    compression=90
 )
 
 tiler = YoloTiler(
@@ -175,7 +178,7 @@ In addition to using the tiler within a script, it can also use the command line
 Here are the instructions:
 
 ```bash
-yolo_tiler --source --target [--slice_wh SLICE_WH SLICE_WH] [--overlap_wh OVERLAP_WH OVERLAP_WH] [--input_ext INPUT_EXT] [--output_ext OUTPUT_EXT] [--annotation_type ANNOTATION_TYPE] [--densify_factor DENSIFY_FACTOR] [--smoothing_tolerance SMOOTHING_TOLERANCE] [--train_ratio TRAIN_RATIO] [--valid_ratio VALID_RATIO] [--test_ratio TEST_RATIO] [--margins MARGINS] [--include_negative_samples INCLUDE_NEGATIVE_SAMPLES]
+yolo_tiler --source --target [--slice_wh SLICE_WH SLICE_WH] [--overlap_wh OVERLAP_WH OVERLAP_WH] [--input_ext INPUT_EXT] [--output_ext OUTPUT_EXT] [--annotation_type ANNOTATION_TYPE] [--densify_factor DENSIFY_FACTOR] [--smoothing_tolerance SMOOTHING_TOLERANCE] [--train_ratio TRAIN_RATIO] [--valid_ratio VALID_RATIO] [--test_ratio TEST_RATIO] [--margins MARGINS] [--include_negative_samples INCLUDE_NEGATIVE_SAMPLES] [--compression COMPRESSION]
 ```
 
 ### Example Commands
@@ -193,6 +196,11 @@ yolo_tiler --source tests/detection --target tests/detection_tiled --slice_wh 64
 3. Custom annotation type and image extension:
 ```bash
 yolo_tiler --source tests/segmentation --target tests/segmentation_tiled --annotation_type instance_segmentation --input_ext .jpg --output_ext .png
+```
+
+4. Custom compression percentage for JPEG/JPG output formats:
+```bash
+yolo_tiler --source tests/detection --target tests/detection_tiled --output_ext .jpg --compression 85
 ```
 
 ### Memory Efficiency
