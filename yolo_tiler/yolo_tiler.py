@@ -1290,7 +1290,7 @@ class YoloTiler:
                                 try:
                                     ax.add_patch(polygon)
                                 except Exception as e:
-                                    self.logger.warning(f"Failed to add polygon: {e}, coords shape"):
+                                    self.logger.warning(f"Failed to add polygon: {e}, coords shape")
                             else:
                                 self.logger.warning(f"Polygon with insufficient coordinates in {image_path.name}")
                         except Exception as e:
