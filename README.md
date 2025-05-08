@@ -78,10 +78,17 @@ config = TileConfig(
     # Include negative samples (tiles without any instances)
     include_negative_samples=True
 
-    # Include source data (copied over)
+    # Include source data (copied over, and included in the tiled dataset)
     copy_source_data=False,
 
-    # Compression percentage for JPEG/JPG output formats (0-100)
+    # Compression setting (interpreted differently for each format):
+    # - JPEG/JPG: Quality level (0-100)
+    # - PNG: Automatically converts to compression level (0-9)
+    # - TIFF: Selects appropriate compression method based on quality
+    #   * High quality (≥90): Lossless LZW compression
+    #   * Medium quality (≥75): Lossless DEFLATE compression
+    #   * Lower quality (<75): JPEG compression with adjusted quality
+    # - BMP: No compression supported
     compression=90
 )
 
@@ -201,6 +208,10 @@ yolo_tiler --source tests/segmentation --target tests/segmentation_tiled --annot
 4. Custom compression percentage for JPEG/JPG output formats:
 ```bash
 yolo_tiler --source tests/detection --target tests/detection_tiled --output_ext .jpg --compression 85
+
+yolo_tiler --source tests/detection --target tests/detection_tiled --output_ext .png --compression 90
+
+yolo_tiler --source tests/detection --target tests/detection_tiled --output_ext .tif --compression 95
 ```
 
 ### Memory Efficiency
