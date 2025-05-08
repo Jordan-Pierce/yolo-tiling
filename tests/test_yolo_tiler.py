@@ -6,6 +6,7 @@ from yolo_tiler import YoloTiler
 from yolo_tiler import TileConfig
 from yolo_tiler import TileProgress
 
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Functions
 # ----------------------------------------------------------------------------------------------------------------------
@@ -24,9 +25,12 @@ def progress_callback(progress: TileProgress):
 # ----------------------------------------------------------------------------------------------------------------------
 # Tests
 # ----------------------------------------------------------------------------------------------------------------------
+
+
 test_detection = True
 test_classification = True
 test_segmentation = True
+test_compression = True
 
 
 if test_detection:
@@ -121,3 +125,35 @@ if test_segmentation:
 
     # Run tiling process for instance segmentation
     tiler_segmentation.run()
+
+
+if test_compression:
+    src_compression = "./tests/detection"
+    dst_compression = "./tests/detection_tiled_compressed"
+
+    config_compression = TileConfig(
+        slice_wh=(320, 240),             # Slice width and height
+        overlap_wh=(0.0, 0.0),           # Overlap width and height (10% overlap in this example, or 64x48 pixels)
+        input_ext=".png",
+        output_ext=".jpg",
+        annotation_type="object_detection",
+        train_ratio=0.7,
+        valid_ratio=0.2,
+        test_ratio=0.1,
+        margins=(0, 0, 0, 0),            # Left, top, right, bottom
+        include_negative_samples=True,   # Include negative samples
+        copy_source_data=False,          # Copy original source data to target directory
+        compression=85                   # Compression percentage for JPEG/JPG output formats
+    )
+
+    # Create tiler with callback for compression test
+    tiler_compression = YoloTiler(
+        source=src_compression,
+        target=dst_compression,
+        config=config_compression,
+        num_viz_samples=5,
+        progress_callback=progress_callback
+    )
+
+    # Run tiling process for compression test
+    tiler_compression.run()

@@ -46,7 +46,8 @@ class TileConfig:
                  test_ratio: float = 0.1,
                  margins: Union[float, Tuple[float, float, float, float]] = 0.0,
                  include_negative_samples: bool = True,
-                 copy_source_data: bool = False):
+                 copy_source_data: bool = False,
+                 compression: int = 90):
         """
         Args:
             slice_wh: Size of each slice (width, height)
@@ -62,6 +63,7 @@ class TileConfig:
             margins: Margins to exclude from tiling (left, top, right, bottom)
             include_negative_samples: Include tiles without annotations
             copy_source_data: Copy original source images to target directory
+            compression: Compression percentage for different output formats (0-100)
         """
         self.slice_wh = slice_wh if isinstance(slice_wh, tuple) else (slice_wh, slice_wh)
         self.overlap_wh = overlap_wh
@@ -75,6 +77,7 @@ class TileConfig:
         self.test_ratio = test_ratio
         self.include_negative_samples = include_negative_samples
         self.copy_source_data = copy_source_data
+        self.compression = compression
         
         # Validate annoation type
         if self.annotation_type not in ["object_detection", "instance_segmentation", "image_classification"]:
@@ -682,7 +685,7 @@ class YoloTiler:
     def _save_tile_image(self, tile_data: np.ndarray, image_path: Path, suffix: str, folder: str) -> None:
         """
         Save a tile image to the appropriate directory.
-
+    
         Args:
             tile_data: Numpy array of tile image
             image_path: Path to original image
@@ -691,28 +694,58 @@ class YoloTiler:
         """
         # Set the save directory based on annotation type
         if self.annotation_type == "image_classification":
-            # For image classification, the directory includes the class category (already validated)
-            # Extract class from original path (assuming structure: source/train/class/image.jpg)
             class_name = image_path.parent.name
             save_dir = self.target / folder / class_name
             image_path_out = save_dir / image_path.name.replace(self.config.input_ext, suffix)
         else:
-            # For object detection/segmentation
             save_dir = self.target / folder / "images"
             image_path_out = save_dir / image_path.name.replace(self.config.input_ext, suffix)
-
+    
         # Make sure the directory exists
         save_dir.mkdir(parents=True, exist_ok=True)
-
-        # Save the image
+    
+        # Select appropriate driver and options based on extension
+        output_ext = self.config.output_ext.lower()
+        
+        if output_ext in ['.jpg', '.jpeg']:
+            driver = 'JPEG'
+            options = {'quality': self.config.compression}
+        elif output_ext == '.png':
+            driver = 'PNG'
+            # PNG compression (0-9); convert from JPEG scale
+            png_compression = min(9, max(0, int(self.config.compression / 10)))
+            options = {'zlevel': png_compression}
+        elif output_ext == '.bmp':
+            driver = 'BMP'
+            options = {}  # BMP doesn't support compression
+        elif output_ext in ['.tif', '.tiff']:
+            driver = 'GTiff'
+            # Map JPEG quality to appropriate TIFF compression
+            if self.config.compression >= 90:
+                # Use lossless LZW for high quality
+                options = {'compress': 'lzw'}
+            elif self.config.compression >= 75:
+                # Use lossless DEFLATE for medium-high quality
+                options = {'compress': 'deflate', 'zlevel': 6}
+            else:
+                # Use JPEG compression for lower quality settings
+                # Scale the JPEG quality to something reasonable for TIFF
+                tiff_jpeg_quality = max(50, self.config.compression)
+                options = {'compress': 'jpeg', 'jpeg_quality': tiff_jpeg_quality}
+        else:
+            # Default to GTiff for unknown formats
+            driver = 'GTiff'
+            options = {'compress': 'lzw'}  # Safe default
+    
         with rasterio.open(
             image_path_out,
             'w',
-            driver='GTiff',
+            driver=driver,
             height=tile_data.shape[1],
             width=tile_data.shape[2],
             count=tile_data.shape[0],
-            dtype=tile_data.dtype
+            dtype=tile_data.dtype,
+            **options
         ) as dst:
             dst.write(tile_data)
 
@@ -1014,6 +1047,8 @@ class YoloTiler:
                     data['valid'] = str(self.target / 'valid' / 'images')
                 if 'test' in data:
                     data['test'] = str(self.target / 'test' / 'images')
+                if 'path' in data:
+                    data['path'] = str(self.target)
                 
                 # Write updated YAML
                 with open(self.target / 'data.yaml', 'w') as f:
@@ -1243,16 +1278,19 @@ class YoloTiler:
                                     coords.append([x, y])
 
                             # Only create polygon if we have enough valid coordinates
-                            if len(coords) >= 3:  # Polygons need at least 3 points
+                            if len(coords) >= 3 and len(set(tuple(p) for p in coords)) >= 3:  # At least 3 unique points
                                 # Create polygon patch with transparency
                                 polygon = MplPolygon(
                                     coords,
                                     facecolor=color,
                                     edgecolor=color,
                                     linewidth=2,
-                                    alpha=0.3  # Add transparency
+                                    alpha=0.3
                                 )
-                                ax.add_patch(polygon)
+                                try:
+                                    ax.add_patch(polygon)
+                                except Exception as e:
+                                    self.logger.warning(f"Failed to add polygon: {e}, coords shape")
                             else:
                                 self.logger.warning(f"Polygon with insufficient coordinates in {image_path.name}")
                         except Exception as e:
@@ -1316,4 +1354,3 @@ class YoloTiler:
         for pbar in self._progress_bars.values():
             pbar.close()
         self._progress_bars.clear()
-

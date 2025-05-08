@@ -52,6 +52,9 @@ def main():
     parser.add_argument("--copy_source_data", action="store_true", default=False,
                         help="Copy original source data to target directory")
     
+    parser.add_argument("--compression", type=int, default=90,
+                        help="Compression percentage for JPEG/JPG output formats (0-100)")
+
     args = parser.parse_args()
     config = TileConfig(
         slice_wh=tuple(args.slice_wh),
@@ -64,7 +67,8 @@ def main():
         train_ratio=args.train_ratio,
         valid_ratio=args.valid_ratio,
         test_ratio=args.test_ratio,
-        copy_source_data=args.copy_source_data
+        copy_source_data=args.copy_source_data,
+        compression=args.compression
     )
     tiler = YoloTiler(
         source=args.source,
