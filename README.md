@@ -11,7 +11,7 @@
 </div>
 
 This module can cut images and corresponding labels from a YOLO dataset into tiles of specified size and create a
-new dataset based on these tiles. It supports object detection, instance segmentation, and image classification. 
+new dataset based on these tiles. It supports object detection, instance segmentation, and image classification.
 Credit for the original repository goes to [slanj](https://github.com/slanj/yolo-tiling).
 
 ## Installation
@@ -112,11 +112,11 @@ class TileProgress:
     current_image_name: str = ""
     current_image_idx: int = 0
     total_images: int = 0
-    current_tile_idx: int = 0  
-    total_tiles: int = 0  
+    current_tile_idx: int = 0
+    total_tiles: int = 0
 ```
 
-Using `TileProgress` custom callback functions can be created. An example of an (optional) `progress_callback` function 
+Using `TileProgress` custom callback functions can be created. An example of an (optional) `progress_callback` function
 can be seen below:
 
 ```python
@@ -135,7 +135,7 @@ def progress_callback(progress: TileProgress):
 
 ### Notes
 
-- The tiler **requires** a YOLO dataset structure within the source directory (see below). 
+- The tiler **requires** a YOLO dataset structure within the source directory (see below).
 - If only a `train` folder exists, the train / valid / test ratios will be used to split the tiled `train` folder.
 - If there already exists train / valid / test folders in the source directory, the ratios are ignored.
 - Tiles are named as `basename_top-left_bottom-right_width_height.ext`.
@@ -181,37 +181,37 @@ python tests/test_yolo_tiler.py
 
 ## Command Line Usage
 
-In addition to using the tiler within a script, it can also use the command line interface to run the tiling process. 
+In addition to using the tiler within a script, it can also use the command line interface to run the tiling process.
 Here are the instructions:
 
 ```bash
-yolo_tiler --source --target [--slice_wh SLICE_WH SLICE_WH] [--overlap_wh OVERLAP_WH OVERLAP_WH] [--input_ext INPUT_EXT] [--output_ext OUTPUT_EXT] [--annotation_type ANNOTATION_TYPE] [--densify_factor DENSIFY_FACTOR] [--smoothing_tolerance SMOOTHING_TOLERANCE] [--train_ratio TRAIN_RATIO] [--valid_ratio VALID_RATIO] [--test_ratio TEST_RATIO] [--margins MARGINS] [--include_negative_samples INCLUDE_NEGATIVE_SAMPLES] [--compression COMPRESSION]
+yolo-tiling --source --target [--slice_wh SLICE_WH SLICE_WH] [--overlap_wh OVERLAP_WH OVERLAP_WH] [--input_ext INPUT_EXT] [--output_ext OUTPUT_EXT] [--annotation_type ANNOTATION_TYPE] [--densify_factor DENSIFY_FACTOR] [--smoothing_tolerance SMOOTHING_TOLERANCE] [--train_ratio TRAIN_RATIO] [--valid_ratio VALID_RATIO] [--test_ratio TEST_RATIO] [--margins MARGINS] [--include_negative_samples INCLUDE_NEGATIVE_SAMPLES] [--compression COMPRESSION]
 ```
 
 ### Example Commands
 
 1. Basic usage with default parameters:
 ```bash
-yolo_tiler --source tests/detection --target tests/detection_tiled
+yolo-tiling --source tests/detection --target tests/detection_tiled
 ```
 
 2. Custom slice size and overlap:
 ```bash
-yolo_tiler --source tests/detection --target tests/detection_tiled --slice_wh 640 480 --overlap_wh 0.1 0.1
+yolo-tiling --source tests/detection --target tests/detection_tiled --slice_wh 640 480 --overlap_wh 0.1 0.1
 ```
 
 3. Custom annotation type and image extension:
 ```bash
-yolo_tiler --source tests/segmentation --target tests/segmentation_tiled --annotation_type instance_segmentation --input_ext .jpg --output_ext .png
+yolo-tiling --source tests/segmentation --target tests/segmentation_tiled --annotation_type instance_segmentation --input_ext .jpg --output_ext .png
 ```
 
 4. Custom compression percentage for JPEG/JPG output formats:
 ```bash
-yolo_tiler --source tests/detection --target tests/detection_tiled --output_ext .jpg --compression 85
+yolo-tiling --source tests/detection --target tests/detection_tiled --output_ext .jpg --compression 85
 
-yolo_tiler --source tests/detection --target tests/detection_tiled --output_ext .png --compression 90
+yolo-tiling --source tests/detection --target tests/detection_tiled --output_ext .png --compression 90
 
-yolo_tiler --source tests/detection --target tests/detection_tiled --output_ext .tif --compression 95
+yolo-tiling --source tests/detection --target tests/detection_tiled --output_ext .tif --compression 95
 ```
 
 ### Memory Efficiency
