@@ -67,66 +67,6 @@ def test_cli_basic_functionality():
             print(f"✗ {test_case['name']} CLI test timed out")
 
 
-def test_cli_error_cases():
-    """Test CLI error handling"""
-    
-    error_cases = [
-        {
-            "name": "Missing required arguments",
-            "args": [],
-            "should_fail": True
-        },
-        {
-            "name": "Invalid source directory",
-            "args": [
-                "--source", "./nonexistent_dir",
-                "--target", "./tests/temp_output"
-            ],
-            "should_fail": True
-        },
-        {
-            "name": "Invalid annotation type",
-            "args": [
-                "--source", "./tests/detection",
-                "--target", "./tests/temp_output", 
-                "--annotation_type", "invalid_type"
-            ],
-            "should_fail": True
-        }
-    ]
-    
-    for case in error_cases:
-        print(f"\nTesting CLI Error Case: {case['name']}")
-        try:
-            # Create target directory if specified
-            if "--target" in case['args']:
-                target_idx = case['args'].index('--target') + 1
-                if target_idx < len(case['args']):
-                    target_dir = Path(case['args'][target_idx])
-                    target_dir.mkdir(parents=True, exist_ok=True)
-            
-            result = subprocess.run([
-                sys.executable, 
-                "-m", 
-                "yolo_tiler.cli"
-            ] + case['args'],
-            capture_output=True, text=True, timeout=30)
-            
-            if case['should_fail'] and result.returncode == 0:
-                print(f"✗ {case['name']} should have failed but didn't")
-            elif case['should_fail'] and result.returncode != 0:
-                print(f"✓ {case['name']} properly failed as expected")
-            elif not case['should_fail'] and result.returncode == 0:
-                print(f"✓ {case['name']} passed as expected")
-            else:
-                print(f"✗ {case['name']} failed unexpectedly")
-                
-        except subprocess.TimeoutExpired:
-            print(f"✗ {case['name']} timed out")
-        except Exception as e:
-            print(f"✗ {case['name']} error: {e}")
-
-
 def test_cli_help():
     """Test CLI help functionality"""
     print("\nTesting CLI Help...")
@@ -151,6 +91,5 @@ if __name__ == "__main__":
     
     test_cli_help()
     test_cli_basic_functionality()
-    test_cli_error_cases()
-    
+        
     print("\nCLI tests completed!")

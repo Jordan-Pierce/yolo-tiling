@@ -161,13 +161,12 @@ class YoloTiler:
         self.show_process_status = show_processing_status
         self._progress_bars = {}
         
-        if not os.path.exists(source):
-            raise ValueError(f"Source directory {source} does not exist")
-        if not os.path.exists(target):
-            raise ValueError(f"Target directory {target} does not exist")
+        try:
+            self.source = Path(source)
+            self.target = Path(target)
+        except:
+            raise ValueError("Source and target must be valid paths")
         
-        self.source = Path(source)
-        self.target = Path(target)
         self.config = config
         self.num_viz_samples = num_viz_samples
         
