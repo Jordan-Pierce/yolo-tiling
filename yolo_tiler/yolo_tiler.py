@@ -157,6 +157,10 @@ class YoloTiler:
             show_processing_status: Whether to show processing status
             progress_callback: Optional callback function to report progress
         """
+        # Add show_process_status parameter and initialize progress bars dict
+        self.show_process_status = show_processing_status
+        self._progress_bars = {}
+        
         if not os.path.exists(source):
             raise ValueError(f"Source directory {source} does not exist")
         if not os.path.exists(target):
@@ -166,10 +170,6 @@ class YoloTiler:
         self.target = Path(target)
         self.config = config
         self.num_viz_samples = num_viz_samples
-        
-        # Add show_process_status parameter and initialize progress bars dict
-        self.show_process_status = show_processing_status
-        self._progress_bars = {}
         
         # Set up the progress callback based on parameters
         if progress_callback is not None:
