@@ -1,3 +1,4 @@
+import os
 import logging
 import math
 import yaml
@@ -156,14 +157,18 @@ class YoloTiler:
             show_processing_status: Whether to show processing status
             progress_callback: Optional callback function to report progress
         """
-        self.source = Path(source)
-        self.target = Path(target)
-        self.config = config
-        self.num_viz_samples = num_viz_samples
-        
         # Add show_process_status parameter and initialize progress bars dict
         self.show_process_status = show_processing_status
         self._progress_bars = {}
+        
+        try:
+            self.source = Path(source)
+            self.target = Path(target)
+        except:
+            raise ValueError("Source and target must be valid paths")
+        
+        self.config = config
+        self.num_viz_samples = num_viz_samples
         
         # Set up the progress callback based on parameters
         if progress_callback is not None:
@@ -1351,6 +1356,7 @@ class YoloTiler:
         
     def __del__(self):
         """Cleanup method to ensure all progress bars are closed"""
-        for pbar in self._progress_bars.values():
-            pbar.close()
-        self._progress_bars.clear()
+        if self._progress_bars:
+            for pbar in self._progress_bars.values():
+                pbar.close()
+            self._progress_bars.clear()
