@@ -1,3 +1,4 @@
+import os
 import logging
 import math
 import yaml
@@ -156,6 +157,11 @@ class YoloTiler:
             show_processing_status: Whether to show processing status
             progress_callback: Optional callback function to report progress
         """
+        if not os.path.exists(source):
+            raise ValueError(f"Source directory {source} does not exist")
+        if not os.path.exists(target):
+            raise ValueError(f"Target directory {target} does not exist")
+        
         self.source = Path(source)
         self.target = Path(target)
         self.config = config
@@ -1351,6 +1357,7 @@ class YoloTiler:
         
     def __del__(self):
         """Cleanup method to ensure all progress bars are closed"""
-        for pbar in self._progress_bars.values():
-            pbar.close()
-        self._progress_bars.clear()
+        if self._progress_bars:
+            for pbar in self._progress_bars.values():
+                pbar.close()
+            self._progress_bars.clear()

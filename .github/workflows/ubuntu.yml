@@ -44,4 +44,5 @@ jobs:
             - name: PKG-TEST
               run: |
                   python tests/test_yolo_tiler.py
+                  python tests/test_yolo_tiling.py
 
