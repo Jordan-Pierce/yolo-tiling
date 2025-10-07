@@ -81,9 +81,14 @@ class TileConfig:
         self.compression = compression
         
         # Validate annoation type
-        if self.annotation_type not in ["object_detection", "instance_segmentation", "image_classification"]:
+        valid_types = ["object_detection", "instance_segmentation", "image_classification", "semantic_segmentation"]
+        if self.annotation_type not in valid_types:
             raise ValueError(f"ERROR: Invalid annotation type: {self.annotation_type}\n\
-                              Must be one of 'object_detection', 'instance_segmentation', 'image_classification'")
+                              Must be one of {valid_types}")
+
+        # Validate output format for semantic segmentation
+        if self.annotation_type == "semantic_segmentation" and self.output_ext.lower() != ".png":
+            raise ValueError("ERROR: Semantic segmentation requires PNG output format (.png)")
 
         # Handle margins
         if isinstance(margins, (int, float)):
@@ -283,7 +288,7 @@ class YoloTiler:
                     if not class_folders:
                         raise ValueError(f"No class folders found in {folder / subfolder}")
             else:
-                # Check for images and labels folders for object detection and instance segmentation
+                # Check for images and labels folders for detection and segmentation tasks
                 if not (folder / subfolder / 'images').exists():
                     raise ValueError(f"Required folder {folder / subfolder / 'images'} does not exist")
                 if not (folder / subfolder / 'labels').exists():
@@ -490,6 +495,22 @@ class YoloTiler:
             df = pd.DataFrame(labels, columns=['class', 'x1', 'y1', 'w', 'h'])
             df.to_csv(path, sep=' ', index=False, header=False, float_format='%.6f')
 
+    def _save_mask(self, mask: np.ndarray, path: Path) -> None:
+        """
+        Save mask to PNG file for semantic segmentation.
+
+        Args:
+            mask: Numpy array of mask data
+            path: Path to save mask
+        """
+        # Ensure mask is uint8
+        mask = mask.astype(np.uint8)
+        
+        # Save as PNG
+        from PIL import Image
+        img = Image.fromarray(mask, mode='L')  # 'L' for grayscale
+        img.save(path)
+
     def tile_image(self, 
                    image_path: Path, 
                    label_path: Union[Path, str],  # Path to labels.txt, or class name
@@ -530,8 +551,23 @@ class YoloTiler:
             # Calculate total tiles for progress tracking
             total_tiles = self._count_total_tiles((effective_width, effective_height))
             
-            # Read all lines from label file if object detection or instance segmentation
-            if self.annotation_type != "image_classification":
+            # Read labels based on annotation type
+            if self.annotation_type == "image_classification":
+                # Image classification (unnecessary for tiling)
+                lines = []
+                boxes = []
+                mask_data = None
+            elif self.annotation_type == "semantic_segmentation":
+                # Read PNG mask for semantic segmentation
+                try:
+                    with rasterio.open(label_path) as mask_src:
+                        mask_data = mask_src.read(1)  # Read single channel mask
+                    lines = []
+                    boxes = []
+                except Exception as e:
+                    raise ValueError(f"Failed to read mask file {label_path}: {e}")
+            else:
+                # Object detection and instance segmentation - read text file
                 try:
                     f = open(label_path)
                     lines = f.readlines()
@@ -539,14 +575,10 @@ class YoloTiler:
                     
                     # Boxes or polygons
                     boxes = []
+                    mask_data = None
                     
                 except Exception as e:
                     raise ValueError(f"Failed to read label file {label_path}: {e}")
-                
-            else:  # Image classification (unnecessary for tiling)
-                lines = []
-                boxes = []
-                tile_labels = []
             
             # Process each line
             for line in lines:
@@ -649,35 +681,40 @@ class YoloTiler:
 
                 tile_labels = []
 
-                # Process annotations for this tile (boxes or polygons)
-                for box_class, box_polygon in boxes:
-                    # Deal with intersections if they occur
-                    # This is necessary for cases where a box / polygon
-                    # is split across tiles
-                    if tile_polygon.intersects(box_polygon):
-                        intersection = tile_polygon.intersection(box_polygon)
+                if self.annotation_type == "semantic_segmentation":
+                    # Crop the mask to the tile area
+                    tile_mask = mask_data[abs_y1:abs_y2, abs_x1:abs_x2]
+                    tile_labels = tile_mask
+                else:
+                    # Process annotations for this tile (boxes or polygons)
+                    for box_class, box_polygon in boxes:
+                        # Deal with intersections if they occur
+                        # This is necessary for cases where a box / polygon
+                        # is split across tiles
+                        if tile_polygon.intersects(box_polygon):
+                            intersection = tile_polygon.intersection(box_polygon)
 
-                        if self.config.annotation_type == "object_detection":
-                            # Handle object detection
-                            bbox = intersection.envelope
-                            center = bbox.centroid
-                            bbox_coords = bbox.exterior.coords.xy
+                            if self.config.annotation_type == "object_detection":
+                                # Handle object detection
+                                bbox = intersection.envelope
+                                center = bbox.centroid
+                                bbox_coords = bbox.exterior.coords.xy
 
-                            # Normalize relative to tile dimensions
-                            tile_width = abs_x2 - abs_x1
-                            tile_height = abs_y2 - abs_y1
+                                # Normalize relative to tile dimensions
+                                tile_width = abs_x2 - abs_x1
+                                tile_height = abs_y2 - abs_y1
 
-                            new_width = (max(bbox_coords[0]) - min(bbox_coords[0])) / tile_width
-                            new_height = (max(bbox_coords[1]) - min(bbox_coords[1])) / tile_height
-                            new_x = (center.x - abs_x1) / tile_width
-                            new_y = (center.y - abs_y1) / tile_height
+                                new_width = (max(bbox_coords[0]) - min(bbox_coords[0])) / tile_width
+                                new_height = (max(bbox_coords[1]) - min(bbox_coords[1])) / tile_height
+                                new_x = (center.x - abs_x1) / tile_width
+                                new_y = (center.y - abs_y1) / tile_height
 
-                            tile_labels.append([box_class, new_x, new_y, new_width, new_height])
-                        else:
-                            # Handle instance segmentation
-                            coord_lists = self._process_intersection(intersection)
-                            normalized = self._normalize_coordinates(coord_lists, (abs_x1, abs_y1, abs_x2, abs_y2))
-                            tile_labels.append([box_class, normalized])
+                                tile_labels.append([box_class, new_x, new_y, new_width, new_height])
+                            else:
+                                # Handle instance segmentation
+                                coord_lists = self._process_intersection(intersection)
+                                normalized = self._normalize_coordinates(coord_lists, (abs_x1, abs_y1, abs_x2, abs_y2))
+                                tile_labels.append([box_class, normalized])
 
                 # Save tile image and labels if include_negative_samples is True or there are labels
                 if self.config.include_negative_samples or tile_labels:
@@ -765,10 +802,14 @@ class YoloTiler:
             folder: Subfolder name (train, valid, test)
         """
         # Save the labels in the appropriate directory
-        label_path = self.target / folder / "labels" / image_path.name.replace(self.config.input_ext, suffix)
-        label_path = label_path.with_suffix('.txt')
-        
-        if self.annotation_type != "image_classification":
+        if self.annotation_type == "semantic_segmentation":
+            label_path = self.target / folder / "labels" / image_path.name.replace(self.config.input_ext, suffix)
+            label_path = label_path.with_suffix('.png')
+            # labels is a numpy array for semantic segmentation
+            self._save_mask(labels, label_path)
+        elif self.annotation_type != "image_classification":
+            label_path = self.target / folder / "labels" / image_path.name.replace(self.config.input_ext, suffix)
+            label_path = label_path.with_suffix('.txt')
             self._save_labels(labels, 
                               label_path, 
                               is_segmentation=self.annotation_type == "instance_segmentation")
@@ -795,7 +836,7 @@ class YoloTiler:
         
         self._save_tile_image(tile_data, original_path, suffix, folder)
         
-        # Only save label files for object detection and instance segmentation
+        # Only save label files for detection and segmentation tasks
         if self.annotation_type != "image_classification":
             self._save_tile_labels(labels, original_path, suffix, folder)
 
@@ -973,15 +1014,19 @@ class YoloTiler:
             image_paths = list((self.source / subfolder).glob(f'**/*{self.config.input_ext}'))
             label_paths = [image_path.parent.name for image_path in image_paths]
         else:
-            # Object detection and instance segmentation (get the images and labels in subfolders)
+            # Detection and segmentation tasks (get the images and labels in subfolders)
             image_paths = list((self.source / subfolder / 'images').glob(f'*{self.config.input_ext}'))
-            label_paths = list((self.source / subfolder / 'labels').glob('*.txt'))
+            
+            if self.annotation_type == "semantic_segmentation":
+                label_paths = list((self.source / subfolder / 'labels').glob('*.png'))
+            else:
+                label_paths = list((self.source / subfolder / 'labels').glob('*.txt'))
             
             # Sort paths to ensure consistent ordering
             image_paths.sort()
             label_paths.sort()
             
-            # For object detection/segmentation, create a mapping of stem to label path
+            # For detection/segmentation, create a mapping of stem to label path
             # This ensures correct matching regardless of directory listing order
             label_dict = {path.stem: path for path in label_paths}
 
@@ -1082,7 +1127,7 @@ class YoloTiler:
                         for img_path in class_dir.glob(f"*{self.config.input_ext}"):
                             shutil.copy2(img_path, target_class_dir / img_path.name)
             else:
-                # For object detection and instance segmentation
+                # For detection and segmentation tasks
                 source_img_dir = self.source / subfolder / "images"
                 source_lbl_dir = self.source / subfolder / "labels"
                 
@@ -1097,8 +1142,13 @@ class YoloTiler:
                     for img_path in source_img_dir.glob(f"*{self.config.input_ext}"):
                         shutil.copy2(img_path, target_img_dir / img_path.name)
                     
-                    # Copy all labels
-                    for lbl_path in source_lbl_dir.glob("*.txt"):
+                    # Copy all labels (TXT for detection/segmentation, PNG for semantic)
+                    if self.annotation_type == "semantic_segmentation":
+                        label_pattern = "*.png"
+                    else:
+                        label_pattern = "*.txt"
+                    
+                    for lbl_path in source_lbl_dir.glob(label_pattern):
                         shutil.copy2(lbl_path, target_lbl_dir / lbl_path.name)
         
         self.logger.info('Source data copied successfully')
@@ -1152,8 +1202,11 @@ class YoloTiler:
             if self.annotation_type == "image_classification":
                 source_label = source_image_path.parent.name  # Class name
             else:
-                # For object detection and instance segmentation
-                source_label_path = source_image_path.parent.parent / 'labels' / f"{source_image_path.stem}.txt"
+                # For detection and segmentation tasks
+                if self.annotation_type == "semantic_segmentation":
+                    source_label_path = source_image_path.parent.parent / 'labels' / f"{source_image_path.stem}.png"
+                else:
+                    source_label_path = source_image_path.parent.parent / 'labels' / f"{source_image_path.stem}.txt"
                 if not source_label_path.exists():
                     self.logger.warning(f"Label file not found for source {source_image_path.name}")
                     continue
@@ -1170,8 +1223,11 @@ class YoloTiler:
                 if self.annotation_type == "image_classification":
                     tile_label = tile_path.parent.name  # Class name
                 else:
-                    # For object detection and instance segmentation
-                    tile_label_path = self.target / 'train' / 'labels' / f"{tile_path.stem}.txt"
+                    # For detection and segmentation tasks
+                    if self.annotation_type == "semantic_segmentation":
+                        tile_label_path = self.target / 'train' / 'labels' / f"{tile_path.stem}.png"
+                    else:
+                        tile_label_path = self.target / 'train' / 'labels' / f"{tile_path.stem}.txt"
                     if not tile_label_path.exists():
                         self.logger.warning(f"Label file not found for tile {tile_path.name}")
                         continue
@@ -1241,8 +1297,36 @@ class YoloTiler:
         np.random.seed(42)  # For consistent colors
         colors = np.random.rand(100, 3)  # Support up to 100 classes
         
-        if self.annotation_type != "image_classification":
-            # Read and parse labels
+        if self.annotation_type == "image_classification":
+            class_name = label_path
+            ax.text(width / 2, height / 2, 
+                    class_name, 
+                    fontsize=12, 
+                    color='white', 
+                    backgroundcolor='black',
+                    ha='center')
+        elif self.annotation_type == "semantic_segmentation":
+            # Read and overlay the mask
+            mask = cv2.imread(str(label_path), cv2.IMREAD_GRAYSCALE)
+            if mask is not None:
+                # Create a colored overlay
+                colored_mask = np.zeros_like(img)
+                for class_id in np.unique(mask):
+                    if class_id == 0:  # Skip background
+                        continue
+                    color = colors[class_id % len(colors)]
+                    # Convert to RGB values
+                    rgb_color = (int(color[0]*255), int(color[1]*255), int(color[2]*255))
+                    colored_mask[mask == class_id] = rgb_color
+                
+                # Blend with original image
+                alpha = 0.5
+                overlay = cv2.addWeighted(img, 1 - alpha, colored_mask, alpha, 0)
+                ax.imshow(overlay)
+            else:
+                self.logger.warning(f"Could not read mask: {label_path}")
+        else:
+            # Object detection and instance segmentation - read text file
             with open(label_path) as f:
                 for line in f:
                     parts = line.strip().split()
@@ -1300,15 +1384,6 @@ class YoloTiler:
                                 self.logger.warning(f"Polygon with insufficient coordinates in {image_path.name}")
                         except Exception as e:
                             self.logger.warning(f"Error creating polygon in {image_path.name}: {e}")
-                        
-        else:  # Image classification
-            class_name = label_path
-            ax.text(width / 2, height / 2, 
-                    class_name, 
-                    fontsize=12, 
-                    color='white', 
-                    backgroundcolor='black',
-                    ha='center')
             
         # Remove axes
         ax.axis('off')

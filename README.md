@@ -11,7 +11,7 @@
 </div>
 
 This module can cut images and corresponding labels from a YOLO dataset into tiles of specified size and create a
-new dataset based on these tiles. It supports object detection, instance segmentation, and image classification.
+new dataset based on these tiles. It supports object detection, instance segmentation, semantic segmentation, and image classification.
 Credit for the original repository goes to [slanj](https://github.com/slanj/yolo-tiling).
 
 ## Installation
@@ -47,19 +47,21 @@ config = TileConfig(
     input_ext=".png",
 
     # Output image file extension to save (default: same as input_ext)
+    # Note: Must be .png for semantic_segmentation
     output_ext=None,
 
     # Type of YOLO annotations to process:
     # - "object_detection": Standard YOLO format (class, x, y, width, height)
     # - "instance_segmentation": YOLO segmentation format (class, x1, y1, x2, y2, ...)
+    # - "semantic_segmentation": PNG mask format (0=background, 1-255=class IDs)
     # - "image_classification": YOLO classification format (class)
     annotation_type="instance_segmentation",
 
-    # For segmentation only: Controls point density along polygon edges
+    # For instance segmentation only: Controls point density along polygon edges
     # Lower values = more points, higher quality but larger files
     densify_factor=0.01,
 
-    # For segmentation only: Controls polygon smoothing
+    # For instance segmentation only: Controls polygon smoothing
     # Lower values = more details preserved, higher values = smoother shapes
     smoothing_tolerance=0.99,
 
@@ -142,7 +144,7 @@ def progress_callback(progress: TileProgress):
 - `copy_source_data` will make copy the original YOLO dataset to the output folder (for multiscale).
 - Pay attention to the differences between the `valid` and `val` folder for different tasks.
 
-#### Object Detection and Instance Segmentation
+#### Object Detection, Instance Segmentation, and Semantic Segmentation
 
 ```bash
 dataset/
@@ -172,6 +174,8 @@ dataset/
     ├── class_1/
     └── class_2/
 ```
+
+**Note**: For semantic segmentation, the `labels/` folders contain PNG mask files (single channel, uint8) where pixel values represent class IDs (0 = background, 1-255 = classes). For object detection and instance segmentation, the `labels/` folders contain `.txt` files with YOLO format annotations.
 
 ### Test Data
 
@@ -205,7 +209,12 @@ yolo-tiling --source tests/detection --target tests/detection_tiled --slice_wh 6
 yolo-tiling --source tests/segmentation --target tests/segmentation_tiled --annotation_type instance_segmentation --input_ext .jpg --output_ext .png
 ```
 
-4. Custom compression percentage for JPEG/JPG output formats:
+4. Semantic segmentation with PNG masks:
+```bash
+yolo-tiling --source tests/semantic --target tests/semantic_tiled --annotation_type semantic_segmentation --input_ext .png --output_ext .png
+```
+
+5. Custom compression percentage for JPEG/JPG output formats:
 ```bash
 yolo-tiling --source tests/detection --target tests/detection_tiled --output_ext .jpg --compression 85
 
