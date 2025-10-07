@@ -47,7 +47,7 @@ config = TileConfig(
     input_ext=".png",
 
     # Output image file extension to save (default: same as input_ext)
-    # Note: Must be .png for semantic_segmentation
+    # Note: Output mask must be .png for semantic_segmentation
     output_ext=None,
 
     # Type of YOLO annotations to process:
@@ -175,7 +175,7 @@ dataset/
     └── class_2/
 ```
 
-**Note**: For semantic segmentation, the `labels/` folders contain PNG mask files (single channel, uint8) where pixel values represent class IDs (0 = background, 1-255 = classes). For object detection and instance segmentation, the `labels/` folders contain `.txt` files with YOLO format annotations.
+**Note**: For semantic segmentation, the `labels/` folders contain PNG mask files (single channel, uint8) where pixel values represent class IDs (0 = background, 1-255 = classes). Tiled masks are also saved as PNG files regardless of the output format specified for images. For object detection and instance segmentation, the `labels/` folders contain `.txt` files with YOLO format annotations.
 
 ### Test Data
 
