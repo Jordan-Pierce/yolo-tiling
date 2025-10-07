@@ -86,10 +86,6 @@ class TileConfig:
             raise ValueError(f"ERROR: Invalid annotation type: {self.annotation_type}\n\
                               Must be one of {valid_types}")
 
-        # Validate output format for semantic segmentation
-        if self.annotation_type == "semantic_segmentation" and self.output_ext.lower() != ".png":
-            raise ValueError("ERROR: Semantic segmentation requires PNG output format (.png)")
-
         # Handle margins
         if isinstance(margins, (int, float)):
             self.margins = (margins, margins, margins, margins)
@@ -803,8 +799,16 @@ class YoloTiler:
         """
         # Save the labels in the appropriate directory
         if self.annotation_type == "semantic_segmentation":
-            label_path = self.target / folder / "labels" / image_path.name.replace(self.config.input_ext, suffix)
-            label_path = label_path.with_suffix('.png')
+            # For semantic segmentation, always use PNG format for masks
+            # Extract coordinates from suffix and create PNG suffix
+            parts = suffix.split('_')
+            if len(parts) >= 5:
+                x1, y1, width, height = parts[-4], parts[-3], parts[-2], parts[-1].split('.')[0]
+                mask_suffix = f'_{x1}_{y1}_{width}_{height}.png'
+            else:
+                # Fallback if parsing fails
+                mask_suffix = suffix.replace(self.config.output_ext, '.png')
+            label_path = self.target / folder / "labels" / image_path.name.replace(self.config.input_ext, mask_suffix)
             # labels is a numpy array for semantic segmentation
             self._save_mask(labels, label_path)
         elif self.annotation_type != "image_classification":
