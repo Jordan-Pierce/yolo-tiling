@@ -1313,6 +1313,8 @@ class YoloTiler:
             # Read and overlay the mask
             mask = cv2.imread(str(label_path), cv2.IMREAD_GRAYSCALE)
             if mask is not None:
+                # Ensure dimensions match (H, W)
+                mask = mask.squeeze()
                 # Create a colored overlay
                 colored_mask = np.zeros_like(img)
                 for class_id in np.unique(mask):
@@ -1320,7 +1322,7 @@ class YoloTiler:
                         continue
                     color = colors[class_id % len(colors)]
                     # Convert to RGB values
-                    rgb_color = (int(color[0]*255), int(color[1]*255), int(color[2]*255))
+                    rgb_color = (int(color[0] * 255), int(color[1] * 255), int(color[2] * 255))
                     colored_mask[mask == class_id] = rgb_color
                 
                 # Blend with original image
