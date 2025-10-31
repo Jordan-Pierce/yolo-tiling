@@ -1226,19 +1226,19 @@ class YoloTiler:
                 class_name = source_image_path.parent.name
                 target_train_dir = self.target / 'train' / class_name
                 if self.config.output_ext is None:
-                    pattern = f"{base_name}_*_*_*_*.*"
+                    pattern = f"{base_name}__*_*_*_*.*"
                 else:
-                    pattern = f"{base_name}_*_*_*_*{self.config.output_ext}"
+                    pattern = f"{base_name}__*_*_*_*{self.config.output_ext}"
                 tiles = list(target_train_dir.glob(pattern))
             else:
                 # For object detection and instance segmentation
                 target_train_dir = self.target / 'train' / 'images'
                 if self.config.output_ext is None:
-                    pattern = f"{base_name}_*_*_*_*.*"
+                    pattern = f"{base_name}__*_*_*_*.*"
                 else:
-                    pattern = f"{base_name}_*_*_*_*{self.config.output_ext}"
+                    pattern = f"{base_name}__*_*_*_*{self.config.output_ext}"
                 tiles = list(target_train_dir.glob(pattern))
-                
+                            
             if not tiles:
                 self.logger.warning(f"No tiles found for source image {source_image_path.name}")
                 continue
