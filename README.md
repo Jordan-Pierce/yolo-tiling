@@ -43,10 +43,8 @@ config = TileConfig(
     # - Tuple of integers for different pixel overlaps: overlap_wh=(64, 48)
     overlap_wh=(0.1, 0.1),
 
-    # Input image file extension to process
-    input_ext=".png",
-
-    # Output image file extension to save (default: same as input_ext)
+    # Output image file extension to save (defaults to input extension if None)
+    # Set to a specific extension like ".jpg" or ".png" to convert formats
     # Note: Output mask must be .png for semantic_segmentation
     output_ext=None,
 
@@ -138,6 +136,9 @@ def progress_callback(progress: TileProgress):
 ### Notes
 
 - The tiler **requires** a YOLO dataset structure within the source directory (see below).
+- Input image file extensions are automatically detected from the source images.
+- **Output format**: By default, tiles are saved in the same format as the input images. To convert to a different format, specify `output_ext` (e.g., `output_ext=".jpg"`).
+- Supported input formats include: JPEG/JPG, PNG, TIFF/TIF, BMP, and other raster formats supported by rasterio.
 - If only a `train` folder exists, the train / valid / test ratios will be used to split the tiled `train` folder.
 - If there already exists train / valid / test folders in the source directory, the ratios are ignored.
 - Tiles are named as `basename_top-left_bottom-right_width_height.ext`.
@@ -189,7 +190,7 @@ In addition to using the tiler within a script, it can also use the command line
 Here are the instructions:
 
 ```bash
-yolo-tiling --source --target [--slice_wh SLICE_WH SLICE_WH] [--overlap_wh OVERLAP_WH OVERLAP_WH] [--input_ext INPUT_EXT] [--output_ext OUTPUT_EXT] [--annotation_type ANNOTATION_TYPE] [--densify_factor DENSIFY_FACTOR] [--smoothing_tolerance SMOOTHING_TOLERANCE] [--train_ratio TRAIN_RATIO] [--valid_ratio VALID_RATIO] [--test_ratio TEST_RATIO] [--margins MARGINS] [--include_negative_samples INCLUDE_NEGATIVE_SAMPLES] [--compression COMPRESSION]
+yolo-tiling --source --target [--slice_wh SLICE_WH SLICE_WH] [--overlap_wh OVERLAP_WH OVERLAP_WH] [--output_ext OUTPUT_EXT] [--annotation_type ANNOTATION_TYPE] [--densify_factor DENSIFY_FACTOR] [--smoothing_tolerance SMOOTHING_TOLERANCE] [--train_ratio TRAIN_RATIO] [--valid_ratio VALID_RATIO] [--test_ratio TEST_RATIO] [--margins MARGINS] [--include_negative_samples INCLUDE_NEGATIVE_SAMPLES] [--compression COMPRESSION]
 ```
 
 ### Example Commands
@@ -206,12 +207,12 @@ yolo-tiling --source tests/detection --target tests/detection_tiled --slice_wh 6
 
 3. Custom annotation type and image extension:
 ```bash
-yolo-tiling --source tests/segmentation --target tests/segmentation_tiled --annotation_type instance_segmentation --input_ext .jpg --output_ext .png
+yolo-tiling --source tests/segmentation --target tests/segmentation_tiled --annotation_type instance_segmentation --output_ext .png
 ```
 
 4. Semantic segmentation with PNG masks:
 ```bash
-yolo-tiling --source tests/semantic --target tests/semantic_tiled --annotation_type semantic_segmentation --input_ext .png --output_ext .png
+yolo-tiling --source tests/semantic --target tests/semantic_tiled --annotation_type semantic_segmentation --output_ext .png
 ```
 
 5. Custom compression percentage for JPEG/JPG output formats:

@@ -40,8 +40,6 @@ if test_detection:
     config_detection = TileConfig(
         slice_wh=(320, 240),             # Slice width and height
         overlap_wh=(0.0, 0.0),           # Overlap width and height (10% overlap in this example, or 64x48 pixels)
-        input_ext=".png",
-        output_ext=None,
         annotation_type="object_detection",
         train_ratio=0.7,
         valid_ratio=0.2,
@@ -71,8 +69,7 @@ if test_classification:
     config_classification = TileConfig(
         slice_wh=(320, 240),            # Slice width and height
         overlap_wh=(0.0, 0.0),          # Overlap width and height (10% overlap in this example, or 64x48 pixels)
-        input_ext=".jpg",
-        output_ext=None,
+        output_ext=".jpg",
         annotation_type="image_classification",
         train_ratio=0.7,
         valid_ratio=0.2,
@@ -102,8 +99,6 @@ if test_segmentation:
     config_segmentation = TileConfig(
         slice_wh=(320, 240),            # Slice width and height
         overlap_wh=(0.0, 0.0),          # Overlap width and height (10% overlap in this example, or 64x48 pixels)
-        input_ext=".png",
-        output_ext=None,
         annotation_type="instance_segmentation",
         train_ratio=0.7,
         valid_ratio=0.2,
@@ -134,7 +129,6 @@ if test_compression:
     config_compression = TileConfig(
         slice_wh=(320, 240),             # Slice width and height
         overlap_wh=(0.0, 0.0),           # Overlap width and height (10% overlap in this example, or 64x48 pixels)
-        input_ext=".png",
         output_ext=".jpg",
         annotation_type="object_detection",
         train_ratio=0.7,

@@ -1,6 +1,7 @@
 import os
 import logging
 import math
+import re
 import yaml
 import random
 import shutil
@@ -38,7 +39,6 @@ class TileConfig:
                  slice_wh: Union[int, Tuple[int, int]],
                  overlap_wh: Union[int, Tuple[float, float]] = 0,
                  annotation_type: str = "object_detection",
-                 input_ext: str = ".png",
                  output_ext: Optional[str] = None,
                  densify_factor: float = 0.5,
                  smoothing_tolerance: float = 0.1,
@@ -54,8 +54,7 @@ class TileConfig:
             slice_wh: Size of each slice (width, height)
             overlap_wh: Overlap between slices as a fraction of slice size (width, height)
             annotation_type: Type of annotation format (object_detection, instance_segmentation, image_classification)
-            input_ext: Input image extension
-            output_ext: Output image extension (defaults to input_ext)
+            output_ext: Output image extension (defaults to input extension)
             densify_factor: Factor to densify lines for smoothing
             smoothing_tolerance: Tolerance for polygon simplification
             train_ratio: Ratio of train set
@@ -69,8 +68,7 @@ class TileConfig:
         self.slice_wh = slice_wh if isinstance(slice_wh, tuple) else (slice_wh, slice_wh)
         self.overlap_wh = overlap_wh
         self.annotation_type = annotation_type
-        self.input_ext = input_ext
-        self.output_ext = output_ext if output_ext is not None else input_ext
+        self.output_ext = output_ext
         self.densify_factor = densify_factor
         self.smoothing_tolerance = smoothing_tolerance
         self.train_ratio = train_ratio
@@ -734,16 +732,22 @@ class YoloTiler:
         if self.annotation_type == "image_classification":
             class_name = image_path.parent.name
             save_dir = self.target / folder / class_name
-            image_path_out = save_dir / image_path.name.replace(self.config.input_ext, suffix)
+            input_ext = image_path.suffix
+            pattern = re.escape(input_ext)
+            new_name = re.sub(pattern, suffix, image_path.name, flags=re.IGNORECASE)
+            image_path_out = save_dir / new_name
         else:
             save_dir = self.target / folder / "images"
-            image_path_out = save_dir / image_path.name.replace(self.config.input_ext, suffix)
+            input_ext = image_path.suffix
+            pattern = re.escape(input_ext)
+            new_name = re.sub(pattern, suffix, image_path.name, flags=re.IGNORECASE)
+            image_path_out = save_dir / new_name
     
         # Make sure the directory exists
         save_dir.mkdir(parents=True, exist_ok=True)
     
         # Select appropriate driver and options based on extension
-        output_ext = self.config.output_ext.lower()
+        output_ext = Path(suffix).suffix.lower()
         
         if output_ext in ['.jpg', '.jpeg']:
             driver = 'JPEG'
@@ -800,19 +804,27 @@ class YoloTiler:
         # Save the labels in the appropriate directory
         if self.annotation_type == "semantic_segmentation":
             # For semantic segmentation, always use PNG format for masks
-            # Extract coordinates from suffix and create PNG suffix
-            parts = suffix.split('_')
-            if len(parts) >= 5:
-                x1, y1, width, height = parts[-4], parts[-3], parts[-2], parts[-1].split('.')[0]
-                mask_suffix = f'_{x1}_{y1}_{width}_{height}.png'
+            # Extract coordinates from suffix using regex for better parsing
+            output_ext = Path(suffix).suffix
+            coord_pattern = r'__(\d+)_(\d+)_(\d+)_(\d+)' + re.escape(output_ext)
+            match = re.search(coord_pattern, suffix)
+            if match:
+                x1, y1, width, height = match.groups()
+                mask_suffix = f'__{x1}_{y1}_{width}_{height}.png'
             else:
                 # Fallback if parsing fails
-                mask_suffix = suffix.replace(self.config.output_ext, '.png')
-            label_path = self.target / folder / "labels" / image_path.name.replace(self.config.input_ext, mask_suffix)
+                mask_suffix = suffix.replace(output_ext, '.png')
+            input_ext = image_path.suffix
+            pattern = re.escape(input_ext)
+            new_name = re.sub(pattern, mask_suffix, image_path.name, flags=re.IGNORECASE)
+            label_path = self.target / folder / "labels" / new_name
             # labels is a numpy array for semantic segmentation
             self._save_mask(labels, label_path)
         elif self.annotation_type != "image_classification":
-            label_path = self.target / folder / "labels" / image_path.name.replace(self.config.input_ext, suffix)
+            input_ext = image_path.suffix
+            pattern = re.escape(input_ext)
+            new_name = re.sub(pattern, suffix, image_path.name, flags=re.IGNORECASE)
+            label_path = self.target / folder / "labels" / new_name
             label_path = label_path.with_suffix('.txt')
             self._save_labels(labels, 
                               label_path, 
@@ -834,9 +846,14 @@ class YoloTiler:
             labels: List of labels for the tile
             folder: Subfolder name (train, valid, test)
         """
-        # Create suffix with coordinates: _x_y_width_height
+        # Create suffix with coordinates using double underscore as delimiter: __x_y_width_height
+        # This prevents conflicts with dashes or other characters in source filenames
         x1, y1, width, height = tile_coords
-        suffix = f'_{x1}_{y1}_{width}_{height}{self.config.output_ext}'
+        if self.config.output_ext is None:
+            output_ext = original_path.suffix
+        else:
+            output_ext = self.config.output_ext
+        suffix = f'__{x1}_{y1}_{width}_{height}{output_ext}'
         
         self._save_tile_image(tile_data, original_path, suffix, folder)
         
@@ -856,7 +873,11 @@ class YoloTiler:
 
     def _split_detection_data(self) -> None:
         """Split data for object detection and instance segmentation"""
-        train_images = list((self.target / 'train' / 'images').glob(f'*{self.config.output_ext}'))
+        if self.config.output_ext is None:
+            pattern = '*'
+        else:
+            pattern = f'*{self.config.output_ext}'
+        train_images = list((self.target / 'train' / 'images').glob(pattern))
         train_labels = list((self.target / 'train' / 'labels').glob('*.txt'))
 
         if not train_images or not train_labels:
@@ -930,7 +951,11 @@ class YoloTiler:
         # Process each class to maintain class distribution
         for class_dir in train_class_dirs:
             class_name = class_dir.name
-            images = list(class_dir.glob(f'*{self.config.output_ext}'))
+            if self.config.output_ext is None:
+                pattern = '*'
+            else:
+                pattern = f'*{self.config.output_ext}'
+            images = list(class_dir.glob(pattern))
             
             if not images:
                 continue
@@ -1015,11 +1040,13 @@ class YoloTiler:
         """Process images and labels in a subfolder."""
         
         if self.annotation_type == 'image_classification':
-            image_paths = list((self.source / subfolder).glob(f'**/*{self.config.input_ext}'))
-            label_paths = [image_path.parent.name for image_path in image_paths]
+            base = self.source / subfolder
+            relative_paths = list(base.glob('**/*'))
+            image_paths = [base / rp for rp in relative_paths]
+            label_paths = [ip.parent.name for ip in image_paths]
         else:
             # Detection and segmentation tasks (get the images and labels in subfolders)
-            image_paths = list((self.source / subfolder / 'images').glob(f'*{self.config.input_ext}'))
+            image_paths = list((self.source / subfolder / 'images').glob('*'))
             
             if self.annotation_type == "semantic_segmentation":
                 label_paths = list((self.source / subfolder / 'labels').glob('*.png'))
@@ -1067,16 +1094,24 @@ class YoloTiler:
         """Check if valid or test folders are empty and split data if necessary."""
         if self.annotation_type == "image_classification":
             # Check if val or test folders are empty
-            val_empty = not any((self.target / 'val').glob(f'**/*{self.config.output_ext}'))
-            test_empty = not any((self.target / 'test').glob(f'**/*{self.config.output_ext}'))
+            if self.config.output_ext is None:
+                pattern = '**/*'
+            else:
+                pattern = f'**/*{self.config.output_ext}'
+            val_empty = not any((self.target / 'val').glob(pattern))
+            test_empty = not any((self.target / 'test').glob(pattern))
             
             if val_empty or test_empty:
                 self.split_data()
                 self.logger.info('Split train data into val and test sets')
         else:
             # For detection/segmentation
-            valid_images = list((self.target / 'valid' / 'images').glob(f'*{self.config.output_ext}'))
-            test_images = list((self.target / 'test' / 'images').glob(f'*{self.config.output_ext}'))
+            if self.config.output_ext is None:
+                pattern = '*'
+            else:
+                pattern = f'*{self.config.output_ext}'
+            valid_images = list((self.target / 'valid' / 'images').glob(pattern))
+            test_images = list((self.target / 'test' / 'images').glob(pattern))
 
             if not valid_images or not test_images:
                 self.split_data()
@@ -1128,7 +1163,7 @@ class YoloTiler:
                         target_class_dir.mkdir(parents=True, exist_ok=True)
                         
                         # Copy all images for this class
-                        for img_path in class_dir.glob(f"*{self.config.input_ext}"):
+                        for img_path in class_dir.glob("*"):
                             shutil.copy2(img_path, target_class_dir / img_path.name)
             else:
                 # For detection and segmentation tasks
@@ -1143,7 +1178,7 @@ class YoloTiler:
                     target_lbl_dir.mkdir(parents=True, exist_ok=True)
                     
                     # Copy all images
-                    for img_path in source_img_dir.glob(f"*{self.config.input_ext}"):
+                    for img_path in source_img_dir.glob("*"):
                         shutil.copy2(img_path, target_img_dir / img_path.name)
                     
                     # Copy all labels (TXT for detection/segmentation, PNG for semantic)
@@ -1169,11 +1204,12 @@ class YoloTiler:
         if self.annotation_type == "image_classification":
             # Get all class directories in train folder
             train_dir = self.source / 'train'
-            source_image_paths = list(train_dir.glob(f'**/*{self.config.input_ext}'))
+            relative_paths = list(train_dir.glob('**/*'))
+            source_image_paths = [train_dir / rp for rp in relative_paths]
         else:
             # Original code for object detection and instance segmentation
             train_image_dir = self.source / 'train' / 'images'
-            source_image_paths = list(train_image_dir.glob(f'*{self.config.input_ext}'))
+            source_image_paths = list(train_image_dir.glob('*'))
 
         if not source_image_paths:
             self.logger.warning("No images found in source train folder for visualization")
@@ -1192,12 +1228,20 @@ class YoloTiler:
                 # For image classification
                 class_name = source_image_path.parent.name
                 target_train_dir = self.target / 'train' / class_name
-                tiles = list(target_train_dir.glob(f"{base_name}_*_*_*_*{self.config.output_ext}"))
+                if self.config.output_ext is None:
+                    pattern = f"{base_name}__*_*_*_*.*"
+                else:
+                    pattern = f"{base_name}__*_*_*_*{self.config.output_ext}"
+                tiles = list(target_train_dir.glob(pattern))
             else:
                 # For object detection and instance segmentation
                 target_train_dir = self.target / 'train' / 'images'
-                tiles = list(target_train_dir.glob(f"{base_name}_*_*_*_*{self.config.output_ext}"))
-                
+                if self.config.output_ext is None:
+                    pattern = f"{base_name}__*_*_*_*.*"
+                else:
+                    pattern = f"{base_name}__*_*_*_*{self.config.output_ext}"
+                tiles = list(target_train_dir.glob(pattern))
+                            
             if not tiles:
                 self.logger.warning(f"No tiles found for source image {source_image_path.name}")
                 continue
