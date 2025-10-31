@@ -17,8 +17,7 @@ def test_cli_basic_functionality():
                 "--source", "./tests/detection",
                 "--target", "./tests/detection_tiled_cli",
                 "--annotation_type", "object_detection",
-                "--slice_wh", "320", "240",
-                "--input_ext", ".png"
+                "--slice_wh", "320", "240"
             ]
         },
         {
@@ -28,7 +27,6 @@ def test_cli_basic_functionality():
                 "--target", "./tests/classification_tiled_cli",
                 "--annotation_type", "image_classification",
                 "--slice_wh", "320", "240",
-                "--input_ext", ".jpg",
                 "--copy_source_data"
             ]
         },
@@ -38,8 +36,7 @@ def test_cli_basic_functionality():
                 "--source", "./tests/segmentation", 
                 "--target", "./tests/segmentation_tiled_cli",
                 "--annotation_type", "instance_segmentation",
-                "--slice_wh", "320", "240",
-                "--input_ext", ".png"
+                "--slice_wh", "320", "240"
             ]
         }
     ]
