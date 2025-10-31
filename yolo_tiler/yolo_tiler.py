@@ -1040,8 +1040,10 @@ class YoloTiler:
         """Process images and labels in a subfolder."""
         
         if self.annotation_type == 'image_classification':
-            image_paths = list((self.source / subfolder).glob('**/*'))
-            label_paths = [image_path.parent.name for image_path in image_paths]
+            base = self.source / subfolder
+            relative_paths = list(base.glob('**/*'))
+            image_paths = [base / rp for rp in relative_paths]
+            label_paths = [ip.parent.name for ip in image_paths]
         else:
             # Detection and segmentation tasks (get the images and labels in subfolders)
             image_paths = list((self.source / subfolder / 'images').glob('*'))
@@ -1202,7 +1204,8 @@ class YoloTiler:
         if self.annotation_type == "image_classification":
             # Get all class directories in train folder
             train_dir = self.source / 'train'
-            source_image_paths = list(train_dir.glob('**/*'))
+            relative_paths = list(train_dir.glob('**/*'))
+            source_image_paths = [train_dir / rp for rp in relative_paths]
         else:
             # Original code for object detection and instance segmentation
             train_image_dir = self.source / 'train' / 'images'
