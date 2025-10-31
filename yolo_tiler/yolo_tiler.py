@@ -1,6 +1,7 @@
 import os
 import logging
 import math
+import re
 import yaml
 import random
 import shutil
@@ -734,10 +735,14 @@ class YoloTiler:
         if self.annotation_type == "image_classification":
             class_name = image_path.parent.name
             save_dir = self.target / folder / class_name
-            image_path_out = save_dir / image_path.name.replace(self.config.input_ext, suffix)
+            pattern = re.escape(self.config.input_ext)
+            new_name = re.sub(pattern, suffix, image_path.name, flags=re.IGNORECASE)
+            image_path_out = save_dir / new_name
         else:
             save_dir = self.target / folder / "images"
-            image_path_out = save_dir / image_path.name.replace(self.config.input_ext, suffix)
+            pattern = re.escape(self.config.input_ext)
+            new_name = re.sub(pattern, suffix, image_path.name, flags=re.IGNORECASE)
+            image_path_out = save_dir / new_name
     
         # Make sure the directory exists
         save_dir.mkdir(parents=True, exist_ok=True)
@@ -800,19 +805,24 @@ class YoloTiler:
         # Save the labels in the appropriate directory
         if self.annotation_type == "semantic_segmentation":
             # For semantic segmentation, always use PNG format for masks
-            # Extract coordinates from suffix and create PNG suffix
-            parts = suffix.split('_')
-            if len(parts) >= 5:
-                x1, y1, width, height = parts[-4], parts[-3], parts[-2], parts[-1].split('.')[0]
-                mask_suffix = f'_{x1}_{y1}_{width}_{height}.png'
+            # Extract coordinates from suffix using regex for better parsing
+            coord_pattern = r'__(\d+)_(\d+)_(\d+)_(\d+)' + re.escape(self.config.output_ext)
+            match = re.search(coord_pattern, suffix)
+            if match:
+                x1, y1, width, height = match.groups()
+                mask_suffix = f'__{x1}_{y1}_{width}_{height}.png'
             else:
                 # Fallback if parsing fails
                 mask_suffix = suffix.replace(self.config.output_ext, '.png')
-            label_path = self.target / folder / "labels" / image_path.name.replace(self.config.input_ext, mask_suffix)
+            pattern = re.escape(self.config.input_ext)
+            new_name = re.sub(pattern, mask_suffix, image_path.name, flags=re.IGNORECASE)
+            label_path = self.target / folder / "labels" / new_name
             # labels is a numpy array for semantic segmentation
             self._save_mask(labels, label_path)
         elif self.annotation_type != "image_classification":
-            label_path = self.target / folder / "labels" / image_path.name.replace(self.config.input_ext, suffix)
+            pattern = re.escape(self.config.input_ext)
+            new_name = re.sub(pattern, suffix, image_path.name, flags=re.IGNORECASE)
+            label_path = self.target / folder / "labels" / new_name
             label_path = label_path.with_suffix('.txt')
             self._save_labels(labels, 
                               label_path, 
@@ -834,9 +844,10 @@ class YoloTiler:
             labels: List of labels for the tile
             folder: Subfolder name (train, valid, test)
         """
-        # Create suffix with coordinates: _x_y_width_height
+        # Create suffix with coordinates using double underscore as delimiter: __x_y_width_height
+        # This prevents conflicts with dashes or other characters in source filenames
         x1, y1, width, height = tile_coords
-        suffix = f'_{x1}_{y1}_{width}_{height}{self.config.output_ext}'
+        suffix = f'__{x1}_{y1}_{width}_{height}{self.config.output_ext}'
         
         self._save_tile_image(tile_data, original_path, suffix, folder)
         
