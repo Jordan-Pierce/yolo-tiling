@@ -711,12 +711,31 @@ class YoloTiler:
                                 tile_labels.append([box_class, normalized])
 
                 # Save tile image and labels if include_negative_samples is True or there are labels
-                if self.config.include_negative_samples or tile_labels:
+                if self.config.include_negative_samples or self._has_annotations(tile_labels):
                     # Calculate width and height for the new naming convention
                     tile_width = abs_x2 - abs_x1
                     tile_height = abs_y2 - abs_y1
                     tile_coords = (abs_x1, abs_y1, tile_width, tile_height)
                     self._save_tile(tile_data, image_path, tile_coords, tile_labels, folder)
+                    
+    def _has_annotations(self, tile_labels) -> bool:
+        """
+        Check if tile has annotations based on annotation type.
+
+        Args:
+            tile_labels: Labels data (list for detection/segmentation, numpy array for semantic segmentation)
+
+        Returns:
+            bool: True if tile has annotations, False otherwise
+        """
+        if self.annotation_type == "semantic_segmentation":
+            # For semantic segmentation, tile_labels is a numpy array (mask)
+            # Check if mask contains any non-zero values (background is typically 0)
+            return isinstance(tile_labels, np.ndarray) and np.any(tile_labels > 0)
+        else:
+            # For other annotation types, tile_labels is a list
+            # Check if list is not empty
+            return bool(tile_labels)
 
     def _save_tile_image(self, tile_data: np.ndarray, image_path: Path, suffix: str, folder: str) -> None:
         """
