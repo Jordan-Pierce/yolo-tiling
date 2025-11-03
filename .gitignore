@@ -110,3 +110,6 @@ ENV/
 tests/detection_tiled
 tests/segmentation_tiled
 tests/classification_tiled
+
+*.pt
+*.pth
