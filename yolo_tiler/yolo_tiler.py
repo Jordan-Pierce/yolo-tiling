@@ -896,8 +896,14 @@ class YoloTiler:
             pattern = '*'
         else:
             pattern = f'*{self.config.output_ext}'
+        
+        if self.annotation_type == "semantic_segmentation":
+            label_pattern = "*.png"  # Or more generally: "*.png" or "*.jpg" etc.
+        else:
+            label_pattern = "*.txt"
+            
         train_images = list((self.target / 'train' / 'images').glob(pattern))
-        train_labels = list((self.target / 'train' / 'labels').glob('*.txt'))
+        train_labels = list((self.target / 'train' / 'labels').glob(label_pattern))
 
         if not train_images or not train_labels:
             self.logger.warning("No train data found to split")
