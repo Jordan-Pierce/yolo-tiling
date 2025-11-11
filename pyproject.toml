@@ -1,6 +1,6 @@
 [project]
 name = "yolo-tiling"
-version = "0.0.26"
+version = "0.0.27"
 dynamic = [
     "dependencies",
 ]
@@ -42,7 +42,7 @@ universal = true
 
 
 [tool.bumpversion]
-current_version = "0.0.26"
+current_version = "0.0.27"
 commit = true
 tag = true
 
