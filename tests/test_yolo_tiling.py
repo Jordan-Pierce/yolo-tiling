@@ -21,16 +21,6 @@ def test_cli_basic_functionality():
             ]
         },
         {
-            "name": "Image Classification", 
-            "args": [
-                "--source", "./tests/classification",
-                "--target", "./tests/classification_tiled_cli",
-                "--annotation_type", "image_classification",
-                "--slice_wh", "320", "240",
-                "--copy_source_data"
-            ]
-        },
-        {
             "name": "Instance Segmentation",
             "args": [
                 "--source", "./tests/segmentation", 

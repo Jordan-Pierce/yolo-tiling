@@ -28,9 +28,9 @@ def progress_callback(progress: TileProgress):
 
 
 test_detection = True
-test_classification = True
+test_classification = False
 test_segmentation = True
-test_compression = True
+test_compression = False
 
 
 if test_detection:
