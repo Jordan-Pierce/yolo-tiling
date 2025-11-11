@@ -1188,14 +1188,14 @@ class YoloTiler:
                 
         else:
             # No callback, use the original tqdm loop for console progress
-            for result in tqdm(self.save_results, desc=f"Saving {subfolder} tiles"):
-                success, message = result.get() # Wait and get the return value
+            for result in tqdm(self.save_results, desc=f"Saving '{subfolder}' tiles"):
+                success, message = result.get()  # Wait and get the return value
                 if not success:
                     # Log errors from the worker processes
                     self.logger.error(message)
             
         self.logger.info(f"All tiles for '{subfolder}' saved.")
-        self.save_results.clear() # Clear the list for the next subfolder
+        self.save_results.clear()  # Clear the list for the next subfolder
         
     def _check_and_split_data(self) -> None:
         """Check if valid or test folders are empty and split data if necessary."""
