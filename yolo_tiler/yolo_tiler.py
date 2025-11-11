@@ -530,24 +530,83 @@ class YoloTiler:
 
         Raises:
             ValueError: If required folders {train, val/id, test} are missing
+                       or if annotation type mismatches label file content.
         """
-        # Subfolder contains {train, val/id, test}
+        label_check_done = False
+        
         for subfolder in self.subfolders:
+            subfolder_path = folder / subfolder
             
             if self.annotation_type == "image_classification":
                 # Check for class folders for image classification
-                if not (folder / subfolder).exists():
-                    raise ValueError(f"Required folder {folder / subfolder} does not exist")
+                if not subfolder_path.exists():
+                    raise ValueError(f"Required folder {subfolder_path} does not exist")
                 else:
-                    class_folders = [sub.name for sub in (folder / subfolder).iterdir() if sub.is_dir()]
+                    class_folders = [sub.name for sub in subfolder_path.iterdir() if sub.is_dir()]
                     if not class_folders:
-                        raise ValueError(f"No class folders found in {folder / subfolder}")
+                        raise ValueError(f"No class folders found in {subfolder_path}")
             else:
-                # Check for images and labels folders for detection and segmentation tasks
-                if not (folder / subfolder / 'images').exists():
-                    raise ValueError(f"Required folder {folder / subfolder / 'images'} does not exist")
-                if not (folder / subfolder / 'labels').exists():
-                    raise ValueError(f"Required folder {folder / subfolder / 'labels'} does not exist")
+                # Check for images and labels folders
+                images_dir = subfolder_path / 'images'
+                labels_dir = subfolder_path / 'labels'
+                
+                if not images_dir.exists():
+                    raise ValueError(f"Required folder {images_dir} does not exist")
+                if not labels_dir.exists():
+                    raise ValueError(f"Required folder {labels_dir} does not exist")
+
+                # Only check .txt-based annotations, and only do it once (on train or first available)
+                if not label_check_done and self.annotation_type in ["object_detection", "instance_segmentation"]:
+                    
+                    # Find the first .txt file in the labels directory
+                    first_label_file = next(labels_dir.glob('*.txt'), None)
+                    
+                    if first_label_file:
+                        label_check_done = True 
+                        # We've found a file to check
+                        
+                        with open(first_label_file, 'r') as f:
+                            # Read first non-empty line
+                            line = ""
+                            while not line:
+                                line_read = f.readline()
+                                if not line_read: 
+                                    break  # End of file
+                                line = line_read.strip()
+
+                        if line:
+                            parts = line.split()
+                            num_parts = len(parts)
+
+                            # Case 1: User chose Object Detection
+                            if self.annotation_type == "object_detection":
+                                # Object detection files must have 5 columns (class x y w h)
+                                if num_parts != 5:
+                                    raise ValueError(
+                                        f"Annotation Type Mismatch: You selected 'object_detection', "
+                                        f"but the label file '{first_label_file.name}' in '{subfolder}' "
+                                        f"has {num_parts} columns."
+                                        f"\n\nExpected 5 (class x y w h). It may be an instance segmentation file?"
+                                    )
+                                    
+                            # Case 2: User chose Instance Segmentation
+                            elif self.annotation_type == "instance_segmentation":
+                                # Instance segmentation files must have 7+ odd-numbered columns
+                                if num_parts == 5:
+                                    raise ValueError(
+                                        f"Annotation Type Mismatch: You selected 'instance_segmentation', "
+                                        f"but the label file '{first_label_file.name}' in '{subfolder}' has 5 columns."
+                                        f"\n\nThis looks like an object detection file (class x y w h)?"
+                                    )
+                                elif num_parts < 7 or num_parts % 2 == 0:
+                                    # Segmentation must have class + at least 3 pairs (x,y) = 7 parts
+                                    # And must be an odd number of parts total
+                                    raise ValueError(
+                                        f"Annotation Type Mismatch: You selected 'instance_segmentation', "
+                                        f"but the label file '{first_label_file.name}' in '{subfolder}' has "
+                                        f"{num_parts} columns."
+                                        f"\n\nExpected 7 or more odd-numbered columns (class x1 y1 ...)."
+                                    )
 
     def _count_total_tiles(self, image_size: Tuple[int, int]) -> int:
         """Count total number of tiles for an image"""
