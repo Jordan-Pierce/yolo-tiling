@@ -545,6 +545,15 @@ class YoloTiler:
                     class_folders = [sub.name for sub in subfolder_path.iterdir() if sub.is_dir()]
                     if not class_folders:
                         raise ValueError(f"No class folders found in {subfolder_path}")
+                    
+            if subfolder.startswith('train'):
+                # Check if there are any files at all within any class subfolders
+                image_files = [p for p in subfolder_path.glob('**/*') if p.is_file()]
+                if not image_files:
+                    raise ValueError(
+                        f"No Data Found: The 'train' directory '{subfolder_path}' "
+                        f"exists, but it (or its class subfolders) contains no image files."
+                    )
             else:
                 # Check for images and labels folders
                 images_dir = subfolder_path / 'images'
@@ -554,6 +563,25 @@ class YoloTiler:
                     raise ValueError(f"Required folder {images_dir} does not exist")
                 if not labels_dir.exists():
                     raise ValueError(f"Required folder {labels_dir} does not exist")
+                
+                if subfolder.startswith('train'):
+                    image_files = list(images_dir.glob('*'))
+                    
+                    if self.annotation_type == "semantic_segmentation":
+                        label_files = list(labels_dir.glob('*.png'))
+                    else:
+                        label_files = list(labels_dir.glob('*.txt'))
+                    
+                    if not image_files:
+                        raise ValueError(
+                            f"No Data Found: The 'train' images directory '{images_dir}' is empty. "
+                            f"There is no data to tile."
+                        )
+                    if not label_files:
+                        raise ValueError(
+                            f"No Data Found: The 'train' labels directory '{labels_dir}' is empty. "
+                            f"There is no data to tile."
+                        )
 
                 # Only check .txt-based annotations, and only do it once (on train or first available)
                 if not label_check_done and self.annotation_type in ["object_detection", "instance_segmentation"]:
