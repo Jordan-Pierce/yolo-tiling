@@ -1,4 +1,3 @@
-import os
 import logging
 import math
 import re
@@ -6,6 +5,7 @@ import yaml
 import random
 import shutil
 import warnings
+import contextlib
 from tqdm import tqdm
 
 from dataclasses import dataclass
@@ -545,178 +545,201 @@ class YoloTiler:
             # Calculate total tiles for progress tracking
             total_tiles = self._count_total_tiles((effective_width, effective_height))
             
-            # Read labels based on annotation type
-            if self.annotation_type == "image_classification":
-                # Image classification (unnecessary for tiling)
-                lines = []
-                boxes = []
-                mask_data = None
-            elif self.annotation_type == "semantic_segmentation":
-                # Read PNG mask for semantic segmentation
-                try:
-                    with rasterio.open(label_path) as mask_src:
-                        mask_data = mask_src.read(1)  # Read single channel mask
-                    lines = []
-                    boxes = []
-                except Exception as e:
-                    raise ValueError(f"Failed to read mask file {label_path}: {e}")
-            else:
-                # Object detection and instance segmentation - read text file
-                try:
-                    f = open(label_path)
-                    lines = f.readlines()
-                    f.close()
-                    
-                    # Boxes or polygons
-                    boxes = []
-                    mask_data = None
-                    
-                except Exception as e:
-                    raise ValueError(f"Failed to read label file {label_path}: {e}")
+            # Conditionally open the mask source file *without* reading it.
+            # It will be read tile-by-tile inside the loop.
+            mask_src_opener = (rasterio.open(label_path) 
+                               if self.annotation_type == "semantic_segmentation" 
+                               else contextlib.nullcontext())
             
-            # Process each line
-            for line in lines:
-                try:
-                    parts = line.strip().split()
-                    class_id = int(parts[0])
-
-                    if self.config.annotation_type == "object_detection":
-                        # Parse normalized coordinates
-                        x_center_norm = float(parts[1])
-                        y_center_norm = float(parts[2])
-                        box_w_norm = float(parts[3])
-                        box_h_norm = float(parts[4])
-
-                        # Convert to absolute coordinates
-                        x_center = x_center_norm * width
-                        y_center = y_center_norm * height
-                        box_w = box_w_norm * width
-                        box_h = box_h_norm * height
-
-                        x1 = x_center - box_w / 2
-                        y1 = y_center - box_h / 2
-                        x2 = x_center + box_w / 2
-                        y2 = y_center + box_h / 2
-                        box_polygon = Polygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])
-
-                        # Only include if box intersects with effective area
-                        if box_polygon.intersects(effective_area):
-                            # Clip box to effective area
-                            clipped_box = box_polygon.intersection(effective_area)
-                            if not clipped_box.is_empty:
-                                boxes.append((class_id, clipped_box))
-            
-                    else:  # Instance segmentation
-                        points = []
-                        for i in range(1, len(parts), 2):
-                            x_norm = float(parts[i])
-                            y_norm = float(parts[i + 1])
-                            x = x_norm * width
-                            y = y_norm * height
-                            points.append((x, y))
-
+            try:
+                with mask_src_opener as mask_src:            
+                    # Read labels based on annotation type
+                    if self.annotation_type == "image_classification":
+                        # Image classification (unnecessary for tiling)
+                        lines = []
+                        boxes = []
+                        mask_data = None
+                    elif self.annotation_type == "semantic_segmentation":
+                        # We no longer read the full mask here.
+                        # mask_src is just an open file handle.
+                        lines = []
+                        boxes = []
+                        mask_data = None  # This var is no longer used
+                    else:
+                        # Object detection and instance segmentation - read text file
                         try:
-                            polygon = Polygon(points)
-                            # Clean and validate polygon
-                            polygon = clean_geometry(polygon)
+                            f = open(label_path)
+                            lines = f.readlines()
+                            f.close()
                             
-                            if polygon.is_valid and polygon.intersects(effective_area):
-                                # Safely perform intersection
+                            # Boxes or polygons
+                            boxes = []
+                            mask_data = None
+                            
+                        except Exception as e:
+                            raise ValueError(f"Failed to read label file {label_path}: {e}")
+                    
+                    # Process each line (for OD/IS)
+                    for line in lines:
+                        try:
+                            parts = line.strip().split()
+                            class_id = int(parts[0])
+
+                            if self.config.annotation_type == "object_detection":
+                                # Parse normalized coordinates
+                                x_center_norm = float(parts[1])
+                                y_center_norm = float(parts[2])
+                                box_w_norm = float(parts[3])
+                                box_h_norm = float(parts[4])
+
+                                # Convert to absolute coordinates
+                                x_center = x_center_norm * width
+                                y_center = y_center_norm * height
+                                box_w = box_w_norm * width
+                                box_h = box_h_norm * height
+
+                                x1 = x_center - box_w / 2
+                                y1 = y_center - box_h / 2
+                                x2 = x_center + box_w / 2
+                                y2 = y_center + box_h / 2
+                                box_polygon = Polygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])
+
+                                # Only include if box intersects with effective area
+                                if box_polygon.intersects(effective_area):
+                                    # Clip box to effective area
+                                    clipped_box = box_polygon.intersection(effective_area)
+                                    if not clipped_box.is_empty:
+                                        boxes.append((class_id, clipped_box))
+            
+                            else:  # Instance segmentation
+                                points = []
+                                for i in range(1, len(parts), 2):
+                                    x_norm = float(parts[i])
+                                    y_norm = float(parts[i + 1])
+                                    x = x_norm * width
+                                    y = y_norm * height
+                                    points.append((x, y))
+
                                 try:
-                                    clipped_polygon = polygon.intersection(effective_area)
-                                    if not clipped_polygon.is_empty:
-                                        boxes.append((class_id, clipped_polygon))
+                                    polygon = Polygon(points)
+                                    # Clean and validate polygon
+                                    polygon = clean_geometry(polygon)
+                                    
+                                    if polygon.is_valid and polygon.intersects(effective_area):
+                                        # Safely perform intersection
+                                        try:
+                                            clipped_polygon = polygon.intersection(effective_area)
+                                            if not clipped_polygon.is_empty:
+                                                boxes.append((class_id, clipped_polygon))
+                                                
+                                        except (shapely.errors.GEOSException, ValueError) as e:
+                                            print(f"Warning: Failed to process polygon in {image_path.name}: {e}")
+                                            continue
                                         
-                                except (shapely.errors.GEOSException, ValueError) as e:
-                                    print(f"Warning: Failed to process polygon in {image_path.name}: {e}")
+                                except Exception as e:
+                                    print(f"Warning: Invalid polygon in {image_path.name}: {e}")
                                     continue
                                 
                         except Exception as e:
-                            print(f"Warning: Invalid polygon in {image_path.name}: {e}")
+                            print(f"Warning: Failed to process line in {label_path}: {e}")
                             continue
+
+                    # Calculate tile positions
+                    effective_areas = self._calculate_tile_positions((effective_width, effective_height))
+                    
+                    # Process each tile within effective area
+                    for tile_idx, (x1, y1, x2, y2) in enumerate(effective_areas):
+                        # Convert tile coordinates to absolute image coordinates
+                        abs_x1 = x1 + x_min
+                        abs_y1 = y1 + y_min
+                        abs_x2 = x2 + x_min
+                        abs_y2 = y2 + y_min
                         
-                except Exception as e:
-                    print(f"Warning: Failed to process line in {label_path}: {e}")
-                    continue
+                        window = Window(abs_x1, abs_y1, abs_x2 - abs_x1, abs_y2 - abs_y1)
+                        
+                        tile_labels = None  # Will be a mask (array) or a list
+                        
+                        if self.annotation_type == "semantic_segmentation":
+                            # Suggestion 1: Windowed read of the mask
+                            tile_mask = mask_src.read(1, window=window)
+                            tile_labels = tile_mask  # This is the annotation
+                            
+                            # Suggestion 3: Optimized check to skip empty tiles
+                            if not self.config.include_negative_samples:
+                                # Check if mask contains any non-zero values
+                                if not np.any(tile_mask > 0):
+                                    continue  # Skip this tile entirely
 
-            # Calculate tile positions
-            effective_areas = self._calculate_tile_positions((effective_width, effective_height))
-            
-            # Process each tile within effective area
-            for tile_idx, (x1, y1, x2, y2) in enumerate(effective_areas):
-                # Convert tile coordinates to absolute image coordinates
-                abs_x1 = x1 + x_min
-                abs_y1 = y1 + y_min
-                abs_x2 = x2 + x_min
-                abs_y2 = y2 + y_min
+                        if self.progress_callback:
+                            progress = TileProgress(
+                                current_tile_idx=tile_idx + 1,
+                                total_tiles=total_tiles,
+                                current_set_name=folder.rstrip('/'),
+                                current_image_name=image_path.name,
+                                current_image_idx=current_image_idx,
+                                total_images=total_images
+                            )
+                            self.progress_callback(progress)
 
-                if self.progress_callback:
-                    progress = TileProgress(
-                        current_tile_idx=tile_idx + 1,
-                        total_tiles=total_tiles,
-                        current_set_name=folder.rstrip('/'),
-                        current_image_name=image_path.name,
-                        current_image_idx=current_image_idx,
-                        total_images=total_images
-                    )
-                    self.progress_callback(progress)
+                        # Read image data *after* the potential skip
+                        tile_data = src.read(window=window)
 
-                # Extract tile data
-                window = Window(abs_x1, abs_y1, abs_x2 - abs_x1, abs_y2 - abs_y1)
-                tile_data = src.read(window=window)
+                        # Create polygon for current tile
+                        tile_polygon = Polygon([
+                            (abs_x1, abs_y1),
+                            (abs_x2, abs_y1),
+                            (abs_x2, abs_y2),
+                            (abs_x1, abs_y2)
+                        ])
 
-                # Create polygon for current tile
-                tile_polygon = Polygon([
-                    (abs_x1, abs_y1),
-                    (abs_x2, abs_y1),
-                    (abs_x2, abs_y2),
-                    (abs_x1, abs_y2)
-                ])
+                        if self.annotation_type != "semantic_segmentation":
+                            # Process OD/IS annotations for this tile
+                            tile_labels_list = []  # Use a temp list
+                            for box_class, box_polygon in boxes:
+                                if tile_polygon.intersects(box_polygon):
+                                    intersection = tile_polygon.intersection(box_polygon)
 
-                tile_labels = []
+                                    if self.config.annotation_type == "object_detection":
+                                        # Handle object detection
+                                        bbox = intersection.envelope
+                                        center = bbox.centroid
+                                        bbox_coords = bbox.exterior.coords.xy
 
-                if self.annotation_type == "semantic_segmentation":
-                    # Crop the mask to the tile area
-                    tile_mask = mask_data[abs_y1:abs_y2, abs_x1:abs_x2]
-                    tile_labels = tile_mask
+                                        # Normalize relative to tile dimensions
+                                        tile_width = abs_x2 - abs_x1
+                                        tile_height = abs_y2 - abs_y1
+
+                                        new_width = (max(bbox_coords[0]) - min(bbox_coords[0])) / tile_width
+                                        new_height = (max(bbox_coords[1]) - min(bbox_coords[1])) / tile_height
+                                        new_x = (center.x - abs_x1) / tile_width
+                                        new_y = (center.y - abs_y1) / tile_height
+
+                                        tile_labels_list.append([box_class, new_x, new_y, new_width, new_height])
+                                    else:
+                                        # Handle instance segmentation
+                                        coord_lists = self._process_intersection(intersection)
+                                        normalized = self._normalize_coordinates(coord_lists, 
+                                                                                 (abs_x1, abs_y1, abs_x2, abs_y2))
+                                        tile_labels_list.append([box_class, normalized])
+                            
+                            tile_labels = tile_labels_list  # Assign the list to the main var
+                        
+                        # Save tile image and labels
+                        # This check now works for all types:
+                        # - Semantic Seg: tile_labels is an array, _has_annotations checks np.any()
+                        # - OD/IS: tile_labels is a list, _has_annotations checks bool()
+                        if self.config.include_negative_samples or self._has_annotations(tile_labels):
+                            tile_width = abs_x2 - abs_x1
+                            tile_height = abs_y2 - abs_y1
+                            tile_coords = (abs_x1, abs_y1, tile_width, tile_height)
+                            self._save_tile(tile_data, image_path, tile_coords, tile_labels, folder)
+
+            # Handle potential mask read errors
+            except Exception as e:
+                if self.annotation_type == "semantic_segmentation" and 'mask_src_opener' in locals():
+                    raise ValueError(f"Failed to read mask file {label_path}: {e}")
                 else:
-                    # Process annotations for this tile (boxes or polygons)
-                    for box_class, box_polygon in boxes:
-                        # Deal with intersections if they occur
-                        # This is necessary for cases where a box / polygon
-                        # is split across tiles
-                        if tile_polygon.intersects(box_polygon):
-                            intersection = tile_polygon.intersection(box_polygon)
-
-                            if self.config.annotation_type == "object_detection":
-                                # Handle object detection
-                                bbox = intersection.envelope
-                                center = bbox.centroid
-                                bbox_coords = bbox.exterior.coords.xy
-
-                                # Normalize relative to tile dimensions
-                                tile_width = abs_x2 - abs_x1
-                                tile_height = abs_y2 - abs_y1
-
-                                new_width = (max(bbox_coords[0]) - min(bbox_coords[0])) / tile_width
-                                new_height = (max(bbox_coords[1]) - min(bbox_coords[1])) / tile_height
-                                new_x = (center.x - abs_x1) / tile_width
-                                new_y = (center.y - abs_y1) / tile_height
-
-                                tile_labels.append([box_class, new_x, new_y, new_width, new_height])
-                            else:
-                                # Handle instance segmentation
-                                coord_lists = self._process_intersection(intersection)
-                                normalized = self._normalize_coordinates(coord_lists, (abs_x1, abs_y1, abs_x2, abs_y2))
-                                tile_labels.append([box_class, normalized])
-
-                # Save tile image and labels if include_negative_samples is True or there are labels
-                if self.config.include_negative_samples or self._has_annotations(tile_labels):
-                    # Calculate width and height for the new naming convention
-                    tile_width = abs_x2 - abs_x1
-                    tile_height = abs_y2 - abs_y1
-                    tile_coords = (abs_x1, abs_y1, tile_width, tile_height)
-                    self._save_tile(tile_data, image_path, tile_coords, tile_labels, folder)
+                    raise e  # Re-raise other errors
                     
     def _has_annotations(self, tile_labels) -> bool:
         """
@@ -1064,11 +1087,17 @@ class YoloTiler:
     def _process_subfolder(self, subfolder: str) -> None:
         """Process images and labels in a subfolder."""
         
-        if self.annotation_type == 'image_classification':
-            base = self.source / subfolder
-            relative_paths = list(base.glob('**/*'))
-            image_paths = [base / rp for rp in relative_paths]
-            label_paths = [ip.parent.name for ip in image_paths]
+        if self.annotation_type == "image_classification":
+            # Get all image paths recursively
+            if self.config.output_ext is None:
+                pattern = '**/*'
+            else:
+                pattern = f'**/*{self.config.output_ext}'
+            image_paths = list((self.source / subfolder).glob(pattern))
+            # Filter to only files (not directories)
+            image_paths = [p for p in image_paths if p.is_file()]
+            # For classification, labels are not separate files, so no label_paths
+            label_paths = []  # Not used for classification
         else:
             # Detection and segmentation tasks (get the images and labels in subfolders)
             image_paths = list((self.source / subfolder / 'images').glob('*'))
@@ -1231,6 +1260,8 @@ class YoloTiler:
             train_dir = self.source / 'train'
             relative_paths = list(train_dir.glob('**/*'))
             source_image_paths = [train_dir / rp for rp in relative_paths]
+            # Filter to only files
+            source_image_paths = [p for p in source_image_paths if p.is_file()]
         else:
             # Original code for object detection and instance segmentation
             train_image_dir = self.source / 'train' / 'images'
