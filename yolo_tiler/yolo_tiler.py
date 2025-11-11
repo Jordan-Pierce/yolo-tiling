@@ -1161,19 +1161,42 @@ class YoloTiler:
             
             self.logger.info(f'Processing {image_path}')
             self.tile_image(image_path, label_path, subfolder, current_image_idx + 1, total_images)
-            
+                        
         # Wait for all save jobs for this subfolder to complete
         self.logger.info(f"Waiting for {len(self.save_results)} tiles in '{subfolder}' to finish saving...")
         
-        for result in tqdm(self.save_results, desc=f"Saving {subfolder} tiles"):
-            success, message = result.get() # Wait and get the return value
-            if not success:
-                # Log errors from the worker processes
-                self.logger.error(message)
+        total_saves = len(self.save_results)
+        
+        if self.progress_callback:
+            # Use the callback to show save progress
+            for save_idx, result in enumerate(self.save_results):
+                success, message = result.get()  # Wait and get the return value
+                if not success:
+                    # Log errors from the worker processes
+                    self.logger.error(message)
+                
+                # Report save progress
+                progress = TileProgress(
+                    current_set_name=f"{subfolder.rstrip('/')} (Saving)",
+                    current_image_name="",  # Not image-specific
+                    current_image_idx=save_idx + 1,
+                    total_images=total_saves,
+                    current_tile_idx=0,  # Use the image_idx/total_images fields
+                    total_tiles=0
+                )
+                self.progress_callback(progress)
+                
+        else:
+            # No callback, use the original tqdm loop for console progress
+            for result in tqdm(self.save_results, desc=f"Saving {subfolder} tiles"):
+                success, message = result.get() # Wait and get the return value
+                if not success:
+                    # Log errors from the worker processes
+                    self.logger.error(message)
             
         self.logger.info(f"All tiles for '{subfolder}' saved.")
         self.save_results.clear() # Clear the list for the next subfolder
-
+        
     def _check_and_split_data(self) -> None:
         """Check if valid or test folders are empty and split data if necessary."""
         if self.annotation_type == "image_classification":
