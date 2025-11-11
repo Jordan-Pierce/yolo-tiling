@@ -177,6 +177,111 @@ def save_tile_worker(
     except Exception as e:
         return (False, f"Error saving tile for {original_path.name}: {e}")
     
+
+def _render_sample_worker(
+    image_path: Path, 
+    label_path: Union[Path, str],  # Path to labels.txt, or class name
+    idx: Union[str, int],
+    annotation_type: str,
+    render_dir: Path
+) -> Tuple[bool, str]:
+    """
+    Worker: Renders a single visualization sample.
+    """
+    try:
+        # Read image using OpenCV
+        img = cv2.imread(str(image_path))
+        if img is None:
+            return (False, f"Could not read image: {image_path}")
+
+        # Convert BGR to RGB
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        height, width = img.shape[:2]
+
+        # Create figure and axis
+        fig, ax = plt.subplots(1)
+        ax.imshow(img)
+
+        # Add image filename as figure title
+        is_source = "source" in str(idx)
+        title = f"{'Source: ' if is_source else 'Tile: '}{image_path.name}"
+        fig.suptitle(title, fontsize=10)
+
+        # Random colors for different classes
+        np.random.seed(42)  # For consistent colors
+        colors = np.random.rand(100, 3)  # Support up to 100 classes
+        
+        if annotation_type == "image_classification":
+            class_name = str(label_path)
+            ax.text(width / 2, height / 2, 
+                    class_name, 
+                    fontsize=12, 
+                    color='white', 
+                    backgroundcolor='black',
+                    ha='center')
+        elif annotation_type == "semantic_segmentation":
+            # Read and overlay the mask
+            mask = cv2.imread(str(label_path), cv2.IMREAD_GRAYSCALE)
+            if mask is not None:
+                mask = mask.squeeze()
+                colored_mask = np.zeros_like(img)
+                for class_id in np.unique(mask):
+                    if class_id == 0: continue
+                    color = colors[class_id % len(colors)]
+                    rgb_color = (int(color[0] * 255), int(color[1] * 255), int(color[2] * 255))
+                    colored_mask[mask == class_id] = rgb_color
+                
+                alpha = 0.5
+                overlay = cv2.addWeighted(img, 1 - alpha, colored_mask, alpha, 0)
+                ax.imshow(overlay)
+            else:
+                return (False, f"Could not read mask: {label_path}")
+        else:
+            # Object detection and instance segmentation
+            with open(label_path) as f:
+                for line in f:
+                    parts = line.strip().split()
+                    class_id = int(parts[0])
+                    color = colors[class_id % len(colors)]
+
+                    if annotation_type == "object_detection":
+                        x_center = float(parts[1]) * width
+                        y_center = float(parts[2]) * height
+                        box_w = float(parts[3]) * width
+                        box_h = float(parts[4]) * height
+                        x = x_center - box_w / 2
+                        y = y_center - box_h / 2
+                        rect = patches.Rectangle((x, y), box_w, box_h, linewidth=2, edgecolor=color, facecolor=color, alpha=0.3)
+                        ax.add_patch(rect)
+                        
+                    else:  # instance segmentation
+                        coords = []
+                        try:
+                            for i in range(1, len(parts), 2):
+                                if i + 1 < len(parts):
+                                    x = float(parts[i]) * width
+                                    y = float(parts[i + 1]) * height
+                                    coords.append([x, y])
+                            if len(coords) >= 3 and len(set(tuple(p) for p in coords)) >= 3:
+                                polygon = MplPolygon(coords, facecolor=color, edgecolor=color, linewidth=2, alpha=0.3)
+                                ax.add_patch(polygon)
+                        except Exception as e:
+                            pass # Log this if needed
+            
+        ax.axis('off')
+        plt.ioff()
+        plt.tight_layout()
+
+        # Save the visualization
+        output_path = render_dir / f"{idx}_{image_path.name}"
+        plt.savefig(output_path, bbox_inches='tight', pad_inches=0.1, dpi=300)
+        plt.close(fig)
+        return (True, str(output_path))
+
+    except Exception as e:
+        plt.close('all') # Ensure all figs are closed on error
+        return (False, f"Error rendering {image_path.name}: {e}")
+    
     
 # ----------------------------------------------------------------------------------------------------------------------
 # Classes
@@ -1177,7 +1282,7 @@ class YoloTiler:
                 
                 # Report save progress
                 progress = TileProgress(
-                    current_set_name=f"{subfolder.rstrip('/')} (Saving)",
+                    current_set_name=f"{subfolder.rstrip('/')}",
                     current_image_name="",  # Not image-specific
                     current_image_idx=save_idx + 1,
                     total_images=total_saves,
@@ -1309,14 +1414,11 @@ class YoloTiler:
 
         # Get images from source directory first
         if self.annotation_type == "image_classification":
-            # Get all class directories in train folder
             train_dir = self.source / 'train'
             relative_paths = list(train_dir.glob('**/*'))
             source_image_paths = [train_dir / rp for rp in relative_paths]
-            # Filter to only files
             source_image_paths = [p for p in source_image_paths if p.is_file()]
         else:
-            # Original code for object detection and instance segmentation
             train_image_dir = self.source / 'train' / 'images'
             source_image_paths = list(train_image_dir.glob('*'))
 
@@ -1328,13 +1430,14 @@ class YoloTiler:
         num_samples = min(self.num_viz_samples, len(source_image_paths))
         selected_source_images = random.sample(source_image_paths, num_samples)
         
+        self.save_results.clear()
+        
         # Process each selected source image
         for image_idx, source_image_path in enumerate(selected_source_images):
             # Find all tiles derived from this source image
             base_name = source_image_path.stem
             
             if self.annotation_type == "image_classification":
-                # For image classification
                 class_name = source_image_path.parent.name
                 target_train_dir = self.target / 'train' / class_name
                 if self.config.output_ext is None:
@@ -1343,7 +1446,6 @@ class YoloTiler:
                     pattern = f"{base_name}__*_*_*_*{self.config.output_ext}"
                 tiles = list(target_train_dir.glob(pattern))
             else:
-                # For object detection and instance segmentation
                 target_train_dir = self.target / 'train' / 'images'
                 if self.config.output_ext is None:
                     pattern = f"{base_name}__*_*_*_*.*"
@@ -1357,9 +1459,8 @@ class YoloTiler:
                 
             # Render source image first
             if self.annotation_type == "image_classification":
-                source_label = source_image_path.parent.name  # Class name
+                label_path = source_image_path.parent.name  # Class name
             else:
-                # For detection and segmentation tasks
                 if self.annotation_type == "semantic_segmentation":
                     source_label_path = source_image_path.parent.parent / 'labels' / f"{source_image_path.stem}.png"
                 else:
@@ -1367,20 +1468,23 @@ class YoloTiler:
                 if not source_label_path.exists():
                     self.logger.warning(f"Label file not found for source {source_image_path.name}")
                     continue
-                
-            # Either the class category or the label file path 
-            label_path = source_label if self.annotation_type == "image_classification" else source_label_path
-            # Render the source image
-            self._render_single_sample(source_image_path, 
-                                       label_path,
-                                       f"{image_idx+1:03d}_source")
+                label_path = source_label_path
+            
+            args = (
+                source_image_path,
+                label_path,
+                f"{image_idx+1:03d}_source",
+                self.annotation_type,
+                self.render_dir
+            )
+            result = self.save_pool.apply_async(_render_sample_worker, args=args)
+            self.save_results.append(result)
             
             # Render each tile
             for tile_idx, tile_path in enumerate(tiles):
                 if self.annotation_type == "image_classification":
-                    tile_label = tile_path.parent.name  # Class name
+                    label_path = tile_path.parent.name  # Class name
                 else:
-                    # For detection and segmentation tasks
                     if self.annotation_type == "semantic_segmentation":
                         tile_label_path = self.target / 'train' / 'labels' / f"{tile_path.stem}.png"
                     else:
@@ -1388,174 +1492,55 @@ class YoloTiler:
                     if not tile_label_path.exists():
                         self.logger.warning(f"Label file not found for tile {tile_path.name}")
                         continue
-                
-                # Update progress
-                if self.progress_callback:
-                    progress = TileProgress(
-                        current_tile_idx=tile_idx + 1,
-                        total_tiles=len(tiles),
-                        current_set_name=f'rendered (image {image_idx+1}/{num_samples})',
-                        current_image_name=source_image_path.name,
-                        current_image_idx=image_idx + 1,
-                        total_images=num_samples
-                    )
-                    self.progress_callback(progress)
+                    label_path = tile_label_path
 
-                # Extract coordinates from filename for better visualization naming
                 try:
-                    # Parse coordinates from the filename (format: name_x_y_width_height.ext)
                     parts = tile_path.stem.split('_')
-                    x = parts[-4]
-                    y = parts[-3]
+                    x, y = parts[-4], parts[-3]
                     render_id = f"{image_idx+1:03d}_tile_x{x}_y{y}_{tile_idx+1:03d}"
                 except (IndexError, ValueError):
-                    # Fallback if parsing fails
                     render_id = f"{image_idx+1:03d}_tile_{tile_idx+1:03d}"
                 
-                # Either the class category or the label file path 
-                label_path = tile_label if self.annotation_type == "image_classification" else tile_label_path
-                # Render the tile
-                self._render_single_sample(tile_path, 
-                                           label_path, 
-                                           render_id)
-            
-    def _render_single_sample(self, image_path: Path, 
-                              label_path: Union[Path, str],  # Path to labels.txt, or class name
-                              idx: Union[str, int]) -> None:
-        """
-        Render a single sample with its annotations.
+                args = (
+                    tile_path,
+                    label_path,
+                    render_id,
+                    self.annotation_type,
+                    self.render_dir
+                )
+                result = self.save_pool.apply_async(_render_sample_worker, args=args)
+                self.save_results.append(result)
 
-        Args:
-            image_path: Path to the image file
-            label_path: Path to the label file, or class name for image classification
-            idx: Index or identifier for the output filename
-        """
-        # Read image using OpenCV
-        img = cv2.imread(str(image_path))
-        if img is None:
-            self.logger.warning(f"Could not read image: {image_path}")
-            return
-
-        # Convert BGR to RGB
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-        height, width = img.shape[:2]
-
-        # Create figure and axis
-        fig, ax = plt.subplots(1)
-        ax.imshow(img)
-
-        # Add image filename as figure title
-        is_source = "source" in str(idx)
-        title = f"{'Source: ' if is_source else 'Tile: '}{image_path.name}"
-        fig.suptitle(title, fontsize=10)
-
-        # Random colors for different classes
-        np.random.seed(42)  # For consistent colors
-        colors = np.random.rand(100, 3)  # Support up to 100 classes
+        # --- MODIFICATION: Add the "wait and report" loop ---
+        self.logger.info(f"Waiting for {len(self.save_results)} visualization samples to render...")
+        total_renders = len(self.save_results)
         
-        if self.annotation_type == "image_classification":
-            class_name = label_path
-            ax.text(width / 2, height / 2, 
-                    class_name, 
-                    fontsize=12, 
-                    color='white', 
-                    backgroundcolor='black',
-                    ha='center')
-        elif self.annotation_type == "semantic_segmentation":
-            # Read and overlay the mask
-            mask = cv2.imread(str(label_path), cv2.IMREAD_GRAYSCALE)
-            if mask is not None:
-                # Ensure dimensions match (H, W)
-                mask = mask.squeeze()
-                # Create a colored overlay
-                colored_mask = np.zeros_like(img)
-                for class_id in np.unique(mask):
-                    if class_id == 0:  # Skip background
-                        continue
-                    color = colors[class_id % len(colors)]
-                    # Convert to RGB values
-                    rgb_color = (int(color[0] * 255), int(color[1] * 255), int(color[2] * 255))
-                    colored_mask[mask == class_id] = rgb_color
+        if self.progress_callback:
+            for render_idx, result in enumerate(self.save_results):
+                success, message = result.get()
+                if not success:
+                    self.logger.error(f"Failed to render sample: {message}")
                 
-                # Blend with original image
-                alpha = 0.5
-                overlay = cv2.addWeighted(img, 1 - alpha, colored_mask, alpha, 0)
-                ax.imshow(overlay)
-            else:
-                self.logger.warning(f"Could not read mask: {label_path}")
+                # Report render progress
+                progress = TileProgress(
+                    current_set_name="Rendering Visuals",
+                    current_image_name="",  # Not image-specific
+                    current_image_idx=render_idx + 1,
+                    total_images=total_renders,
+                    current_tile_idx=0,  # Use image_idx/total_images
+                    total_tiles=0
+                )
+                self.progress_callback(progress)
         else:
-            # Object detection and instance segmentation - read text file
-            with open(label_path) as f:
-                for line in f:
-                    parts = line.strip().split()
-                    class_id = int(parts[0])
-                    color = colors[class_id % len(colors)]
-
-                    if self.config.annotation_type == "object_detection":
-                        # Parse bounding box
-                        x_center = float(parts[1]) * width
-                        y_center = float(parts[2]) * height
-                        box_w = float(parts[3]) * width
-                        box_h = float(parts[4]) * height
-
-                        # Calculate box coordinates
-                        x = x_center - box_w / 2
-                        y = y_center - box_h / 2
-
-                        # Create rectangle patch with transparency
-                        rect = patches.Rectangle(
-                            (x, y),
-                            box_w,
-                            box_h,
-                            linewidth=2,
-                            edgecolor=color,
-                            facecolor=color,
-                            alpha=0.3  # Add transparency
-                        )
-                        ax.add_patch(rect)
-                        
-                    else:  # instance segmentation
-                        # Parse polygon coordinates
-                        coords = []
-                        try:
-                            for i in range(1, len(parts), 2):
-                                if i + 1 < len(parts):  # Make sure y coordinate exists
-                                    x = float(parts[i]) * width
-                                    y = float(parts[i + 1]) * height
-                                    coords.append([x, y])
-
-                            # Only create polygon if we have enough valid coordinates
-                            if len(coords) >= 3 and len(set(tuple(p) for p in coords)) >= 3:  # At least 3 unique points
-                                # Create polygon patch with transparency
-                                polygon = MplPolygon(
-                                    coords,
-                                    facecolor=color,
-                                    edgecolor=color,
-                                    linewidth=2,
-                                    alpha=0.3
-                                )
-                                try:
-                                    ax.add_patch(polygon)
-                                except Exception as e:
-                                    self.logger.warning(f"Failed to add polygon: {e}, coords shape")
-                            else:
-                                self.logger.warning(f"Polygon with insufficient coordinates in {image_path.name}")
-                        except Exception as e:
-                            self.logger.warning(f"Error creating polygon in {image_path.name}: {e}")
-            
-        # Remove axes
-        ax.axis('off')
-
-        # Adjust layout
-        plt.ioff()  # Turn off interactive mode
-        plt.tight_layout()
-
-        # Save the visualization
-        output_path = self.render_dir / image_path.name
-        plt.savefig(output_path, bbox_inches='tight', pad_inches=0.1, dpi=300)
-        plt.close(fig)  # Close the specific figure
-
+            # Fallback to tqdm for console
+            for result in tqdm(self.save_results, desc="Rendering Samples"):
+                success, message = result.get()
+                if not success:
+                    self.logger.error(f"Failed to render sample: {message}")
+                    
+        self.logger.info("All visualization samples rendered.")
+        self.save_results.clear()
+    
     def run(self) -> None:
         """Run the complete tiling process"""
         try:
