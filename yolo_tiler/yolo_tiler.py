@@ -8,6 +8,9 @@ import warnings
 import contextlib
 from tqdm import tqdm
 
+from multiprocessing import Pool, cpu_count
+
+from PIL import Image
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Tuple, Optional, Union, Generator, Callable
@@ -28,6 +31,153 @@ from shapely.geometry import Polygon, MultiPolygon
 warnings.filterwarnings("ignore", category=rasterio.errors.NotGeoreferencedWarning)
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Multiprocessing Worker Functions
+# ----------------------------------------------------------------------------------------------------------------------
+
+
+def _save_mask_worker(mask: np.ndarray, path: Path) -> None:
+    """Worker: Save mask to file for semantic segmentation."""
+    mask = mask.astype(np.uint8)
+    img = Image.fromarray(mask, mode='L')  # 'L' for grayscale
+    img.save(path)  # Format (BMP, PNG, WebP) inferred from path extension
+
+
+def _save_labels_worker(labels: List, path: Path, is_segmentation: bool) -> None:
+    """Worker: Save labels to file in appropriate format."""
+    if is_segmentation:
+        with open(path, 'w') as f:
+            for label_class, points in labels:
+                f.write(f"{label_class} {points}\n")
+    else:  # Object detection
+        df = pd.DataFrame(labels, columns=['class', 'x1', 'y1', 'w', 'h'])
+        df.to_csv(path, sep=' ', index=False, header=False, float_format='%.6f')
+
+
+def _save_tile_image_worker(tile_data: np.ndarray, 
+                            image_path_out: Path, 
+                            compression_quality: int) -> None:
+    """Worker: Save a tile image to the appropriate directory."""
+    
+    output_ext = image_path_out.suffix.lower()
+    
+    if output_ext in ['.jpg', '.jpeg']:
+        driver = 'JPEG'
+        options = {'quality': compression_quality}
+    elif output_ext == '.png':
+        driver = 'PNG'
+        # PNG compression (0-9); convert from JPEG scale
+        png_compression = min(9, max(0, int(compression_quality / 10)))
+        options = {'zlevel': png_compression}
+    elif output_ext == '.bmp':
+        driver = 'BMP'
+        options = {}  # BMP doesn't support compression
+    elif output_ext in ['.tif', '.tiff']:
+        driver = 'GTiff'
+        # Map JPEG quality to appropriate TIFF compression
+        if compression_quality >= 90:
+            options = {'compress': 'lzw'}
+        elif compression_quality >= 75:
+            options = {'compress': 'deflate', 'zlevel': 6}
+        else:
+            tiff_jpeg_quality = max(50, compression_quality)
+            options = {'compress': 'jpeg', 'jpeg_quality': tiff_jpeg_quality}
+    else:
+        # Default to GTiff for unknown formats
+        driver = 'GTiff'
+        options = {'compress': 'lzw'}  # Safe default
+
+    with rasterio.open(
+        image_path_out,
+        'w',
+        driver=driver,
+        height=tile_data.shape[1],
+        width=tile_data.shape[2],
+        count=tile_data.shape[0],
+        dtype=tile_data.dtype,
+        **options
+    ) as dst:
+        dst.write(tile_data)
+
+
+def save_tile_worker(
+    tile_data: np.ndarray,
+    original_path: Path,
+    tile_coords: Tuple[int, int, int, int],
+    labels: Optional[List],
+    folder_base_path: Path,  # e.g., .../tiled/train
+    folder_sub_name: str,    # e.g., 'train/'
+    annotation_type: str,
+    output_ext_str: str,
+    compression_quality: int
+) -> Tuple[bool, str]:
+    """
+    Main multiprocessing worker function.
+    This function contains the logic from _save_tile, _save_tile_image, 
+    and _save_tile_labels, combined to be self-contained.
+    Returns (Success, message or path)
+    """
+    try:
+        x1, y1, width, height = tile_coords
+        if output_ext_str is None:
+            output_ext = original_path.suffix
+        else:
+            output_ext = output_ext_str
+        suffix = f'__{x1}_{y1}_{width}_{height}{output_ext}'
+
+        # --- Reconstruct target folder path ---
+        # folder_base_path is self.target / folder_sub_name
+        # We must reconstruct the full path for the worker
+        
+        # --- Logic from _save_tile_image ---
+        if annotation_type == "image_classification":
+            class_name = original_path.parent.name
+            save_dir = folder_base_path / class_name
+        else:
+            save_dir = folder_base_path / "images"
+        
+        input_ext = original_path.suffix
+        pattern = re.escape(input_ext)
+        new_name = re.sub(pattern, suffix, original_path.name, flags=re.IGNORECASE)
+        image_path_out = save_dir / new_name
+        
+        save_dir.mkdir(parents=True, exist_ok=True)
+        _save_tile_image_worker(tile_data, image_path_out, compression_quality)
+
+        # --- Logic from _save_tile_labels ---
+        if annotation_type == "semantic_segmentation":
+            coord_pattern = r'__(\d+)_(\d+)_(\d+)_(\d+)' + re.escape(output_ext)
+            match = re.search(coord_pattern, suffix)
+            
+            # Use .bmp for speed, or .png/.webp if you changed it
+            mask_ext = '.png' 
+            
+            if match:
+                x1, y1, width, height = match.groups()
+                mask_suffix = f'__{x1}_{y1}_{width}_{height}{mask_ext}'
+            else:
+                mask_suffix = suffix.replace(output_ext, mask_ext)
+            
+            input_ext = original_path.suffix
+            pattern = re.escape(input_ext)
+            new_name = re.sub(pattern, mask_suffix, original_path.name, flags=re.IGNORECASE)
+            label_path = folder_base_path / "labels" / new_name
+            _save_mask_worker(labels, label_path)
+
+        elif annotation_type != "image_classification":
+            input_ext = original_path.suffix
+            pattern = re.escape(input_ext)
+            new_name = re.sub(pattern, suffix, original_path.name, flags=re.IGNORECASE)
+            label_path = folder_base_path / "labels" / new_name
+            label_path = label_path.with_suffix('.txt')
+            _save_labels_worker(labels, label_path, is_segmentation=annotation_type == "instance_segmentation")
+
+        return (True, str(image_path_out))
+
+    except Exception as e:
+        return (False, f"Error saving tile for {original_path.name}: {e}")
+    
+    
 # ----------------------------------------------------------------------------------------------------------------------
 # Classes
 # ----------------------------------------------------------------------------------------------------------------------
@@ -191,6 +341,12 @@ class YoloTiler:
         if self.num_viz_samples > 0:
             self.render_dir = self.target / 'rendered'
             self.render_dir.mkdir(parents=True, exist_ok=True)
+            
+        # Create a multiprocessing pool to handle CPU-bound work (PNG compression)
+        num_workers = max(1, cpu_count() - 1) # Leave one core for the main thread
+        self.logger.info(f"Initializing multiprocessing.Pool with {num_workers} workers for saving tiles.")
+        self.save_pool = Pool(processes=num_workers)
+        self.save_results = []
             
     def _tqdm_callback(self, progress: TileProgress):
         """Internal callback function that uses tqdm for progress tracking
@@ -489,22 +645,6 @@ class YoloTiler:
             df = pd.DataFrame(labels, columns=['class', 'x1', 'y1', 'w', 'h'])
             df.to_csv(path, sep=' ', index=False, header=False, float_format='%.6f')
 
-    def _save_mask(self, mask: np.ndarray, path: Path) -> None:
-        """
-        Save mask to PNG file for semantic segmentation.
-
-        Args:
-            mask: Numpy array of mask data
-            path: Path to save mask
-        """
-        # Ensure mask is uint8
-        mask = mask.astype(np.uint8)
-        
-        # Save as PNG
-        from PIL import Image
-        img = Image.fromarray(mask, mode='L')  # 'L' for grayscale
-        img.save(path)
-
     def tile_image(self, 
                    image_path: Path, 
                    label_path: Union[Path, str],  # Path to labels.txt, or class name
@@ -732,7 +872,28 @@ class YoloTiler:
                             tile_width = abs_x2 - abs_x1
                             tile_height = abs_y2 - abs_y1
                             tile_coords = (abs_x1, abs_y1, tile_width, tile_height)
-                            self._save_tile(tile_data, image_path, tile_coords, tile_labels, folder)
+                            
+                            # Get the full target path for the worker
+                            target_folder_path = self.target / folder.rstrip('/')
+
+                            # 'labels' is a numpy array for seg, list for others.
+                            # tile_data is a numpy array. Both are pickle-able.
+                            # We pass config values directly.
+                            args = (
+                                tile_data, 
+                                image_path,
+                                tile_coords,
+                                tile_labels,
+                                target_folder_path,   # Pass the full Path
+                                folder,               # Pass the subfolder name string
+                                self.annotation_type,
+                                self.config.output_ext,
+                                self.config.compression
+                            )
+                            
+                            # Dispatch to the top-level worker function
+                            result = self.save_pool.apply_async(save_tile_worker, args=args)
+                            self.save_results.append(result)
 
             # Handle potential mask read errors
             except Exception as e:
@@ -759,149 +920,6 @@ class YoloTiler:
             # For other annotation types, tile_labels is a list
             # Check if list is not empty
             return bool(tile_labels)
-
-    def _save_tile_image(self, tile_data: np.ndarray, image_path: Path, suffix: str, folder: str) -> None:
-        """
-        Save a tile image to the appropriate directory.
-    
-        Args:
-            tile_data: Numpy array of tile image
-            image_path: Path to original image
-            suffix: Suffix for the tile filename
-            folder: Subfolder name (train, val/id, test)
-        """
-        # Set the save directory based on annotation type
-        if self.annotation_type == "image_classification":
-            class_name = image_path.parent.name
-            save_dir = self.target / folder / class_name
-            input_ext = image_path.suffix
-            pattern = re.escape(input_ext)
-            new_name = re.sub(pattern, suffix, image_path.name, flags=re.IGNORECASE)
-            image_path_out = save_dir / new_name
-        else:
-            save_dir = self.target / folder / "images"
-            input_ext = image_path.suffix
-            pattern = re.escape(input_ext)
-            new_name = re.sub(pattern, suffix, image_path.name, flags=re.IGNORECASE)
-            image_path_out = save_dir / new_name
-    
-        # Make sure the directory exists
-        save_dir.mkdir(parents=True, exist_ok=True)
-    
-        # Select appropriate driver and options based on extension
-        output_ext = Path(suffix).suffix.lower()
-        
-        if output_ext in ['.jpg', '.jpeg']:
-            driver = 'JPEG'
-            options = {'quality': self.config.compression}
-        elif output_ext == '.png':
-            driver = 'PNG'
-            # PNG compression (0-9); convert from JPEG scale
-            png_compression = min(9, max(0, int(self.config.compression / 10)))
-            options = {'zlevel': png_compression}
-        elif output_ext == '.bmp':
-            driver = 'BMP'
-            options = {}  # BMP doesn't support compression
-        elif output_ext in ['.tif', '.tiff']:
-            driver = 'GTiff'
-            # Map JPEG quality to appropriate TIFF compression
-            if self.config.compression >= 90:
-                # Use lossless LZW for high quality
-                options = {'compress': 'lzw'}
-            elif self.config.compression >= 75:
-                # Use lossless DEFLATE for medium-high quality
-                options = {'compress': 'deflate', 'zlevel': 6}
-            else:
-                # Use JPEG compression for lower quality settings
-                # Scale the JPEG quality to something reasonable for TIFF
-                tiff_jpeg_quality = max(50, self.config.compression)
-                options = {'compress': 'jpeg', 'jpeg_quality': tiff_jpeg_quality}
-        else:
-            # Default to GTiff for unknown formats
-            driver = 'GTiff'
-            options = {'compress': 'lzw'}  # Safe default
-    
-        with rasterio.open(
-            image_path_out,
-            'w',
-            driver=driver,
-            height=tile_data.shape[1],
-            width=tile_data.shape[2],
-            count=tile_data.shape[0],
-            dtype=tile_data.dtype,
-            **options
-        ) as dst:
-            dst.write(tile_data)
-
-    def _save_tile_labels(self, labels: Optional[List], image_path: Path, suffix: str, folder: str) -> None:
-        """
-        Save tile labels to the appropriate directory.
-
-        Args:
-            labels: List of labels for the tile
-            image_path: Path to original image
-            suffix: Suffix for the tile filename
-            folder: Subfolder name (train, valid, test)
-        """
-        # Save the labels in the appropriate directory
-        if self.annotation_type == "semantic_segmentation":
-            # For semantic segmentation, always use PNG format for masks
-            # Extract coordinates from suffix using regex for better parsing
-            output_ext = Path(suffix).suffix
-            coord_pattern = r'__(\d+)_(\d+)_(\d+)_(\d+)' + re.escape(output_ext)
-            match = re.search(coord_pattern, suffix)
-            if match:
-                x1, y1, width, height = match.groups()
-                mask_suffix = f'__{x1}_{y1}_{width}_{height}.png'
-            else:
-                # Fallback if parsing fails
-                mask_suffix = suffix.replace(output_ext, '.png')
-            input_ext = image_path.suffix
-            pattern = re.escape(input_ext)
-            new_name = re.sub(pattern, mask_suffix, image_path.name, flags=re.IGNORECASE)
-            label_path = self.target / folder / "labels" / new_name
-            # labels is a numpy array for semantic segmentation
-            self._save_mask(labels, label_path)
-        elif self.annotation_type != "image_classification":
-            input_ext = image_path.suffix
-            pattern = re.escape(input_ext)
-            new_name = re.sub(pattern, suffix, image_path.name, flags=re.IGNORECASE)
-            label_path = self.target / folder / "labels" / new_name
-            label_path = label_path.with_suffix('.txt')
-            self._save_labels(labels, 
-                              label_path, 
-                              is_segmentation=self.annotation_type == "instance_segmentation")
-
-    def _save_tile(self,
-                   tile_data: np.ndarray,
-                   original_path: Path,
-                   tile_coords: Tuple[int, int, int, int],
-                   labels: Optional[List],
-                   folder: str) -> None:
-        """
-        Save a tile image and its labels.
-
-        Args:
-            tile_data: Numpy array of tile image
-            original_path: Path to original image
-            tile_coords: Tuple of (x1, y1, width, height) for the tile
-            labels: List of labels for the tile
-            folder: Subfolder name (train, valid, test)
-        """
-        # Create suffix with coordinates using double underscore as delimiter: __x_y_width_height
-        # This prevents conflicts with dashes or other characters in source filenames
-        x1, y1, width, height = tile_coords
-        if self.config.output_ext is None:
-            output_ext = original_path.suffix
-        else:
-            output_ext = self.config.output_ext
-        suffix = f'__{x1}_{y1}_{width}_{height}{output_ext}'
-        
-        self._save_tile_image(tile_data, original_path, suffix, folder)
-        
-        # Only save label files for detection and segmentation tasks
-        if self.annotation_type != "image_classification":
-            self._save_tile_labels(labels, original_path, suffix, folder)
 
     def split_data(self) -> None:
         """
@@ -1143,6 +1161,18 @@ class YoloTiler:
             
             self.logger.info(f'Processing {image_path}')
             self.tile_image(image_path, label_path, subfolder, current_image_idx + 1, total_images)
+            
+        # Wait for all save jobs for this subfolder to complete
+        self.logger.info(f"Waiting for {len(self.save_results)} tiles in '{subfolder}' to finish saving...")
+        
+        for result in tqdm(self.save_results, desc=f"Saving {subfolder} tiles"):
+            success, message = result.get() # Wait and get the return value
+            if not success:
+                # Log errors from the worker processes
+                self.logger.error(message)
+            
+        self.logger.info(f"All tiles for '{subfolder}' saved.")
+        self.save_results.clear() # Clear the list for the next subfolder
 
     def _check_and_split_data(self) -> None:
         """Check if valid or test folders are empty and split data if necessary."""
@@ -1541,3 +1571,10 @@ class YoloTiler:
             for pbar in self._progress_bars.values():
                 pbar.close()
             self._progress_bars.clear()
+            
+        # Properly shut down the multiprocessing pool
+        if hasattr(self, 'save_pool') and self.save_pool:
+            self.logger.info("Shutting down multiprocessing pool...")
+            self.save_pool.close() # No more new tasks
+            self.save_pool.join()  # Wait for all existing tasks to finish
+            self.logger.info("Pool shut down.")
