@@ -8,7 +8,8 @@ import warnings
 import contextlib
 from tqdm import tqdm
 
-from multiprocessing import Pool, cpu_count
+from concurrent.futures import ProcessPoolExecutor, wait, FIRST_COMPLETED, as_completed
+from multiprocessing import cpu_count
 
 from PIL import Image
 from dataclasses import dataclass
@@ -447,11 +448,14 @@ class YoloTiler:
             self.render_dir = self.target / 'rendered'
             self.render_dir.mkdir(parents=True, exist_ok=True)
             
-        # Create a multiprocessing pool to handle CPU-bound work (PNG compression)
-        num_workers = max(1, cpu_count() - 1) # Leave one core for the main thread
-        self.logger.info(f"Initializing multiprocessing.Pool with {num_workers} workers for saving tiles.")
-        self.save_pool = Pool(processes=num_workers)
-        self.save_results = []
+        # Create a ProcessPoolExecutor to handle CPU-bound work (PNG compression)
+        num_workers = max(1, cpu_count() - 1)  # Leave one core for the main thread
+        self.logger.info(f"Initializing ProcessPoolExecutor with {num_workers} workers for saving tiles.")
+        self.save_executor = ProcessPoolExecutor(max_workers=num_workers)
+        # Track outstanding futures to throttle memory/IO usage
+        self._save_futures = set()
+        # Maximum number of outstanding futures before blocking/waiting
+        self._max_outstanding = 100
             
     def _tqdm_callback(self, progress: TileProgress):
         """Internal callback function that uses tqdm for progress tracking
@@ -1117,9 +1121,21 @@ class YoloTiler:
                                 self.config.compression
                             )
                             
-                            # Dispatch to the top-level worker function
-                            result = self.save_pool.apply_async(save_tile_worker, args=args)
-                            self.save_results.append(result)
+                            # Dispatch to the top-level worker function via executor
+                            future = self.save_executor.submit(save_tile_worker, *args)
+                            self._save_futures.add(future)
+
+                            # Throttle outstanding futures: wait for at least one to complete
+                            if len(self._save_futures) >= self._max_outstanding:
+                                done, not_done = wait(self._save_futures, return_when=FIRST_COMPLETED)
+                                for f in done:
+                                    try:
+                                        success, message = f.result()
+                                        if not success:
+                                            self.logger.error(message)
+                                    except Exception as e:
+                                        self.logger.exception(f"Save worker raised: {e}")
+                                self._save_futures = set(not_done)
 
             # Handle potential mask read errors
             except Exception as e:
@@ -1393,39 +1409,33 @@ class YoloTiler:
             self.tile_image(image_path, label_path, subfolder, current_image_idx + 1, total_images)
                         
         # Wait for all save jobs for this subfolder to complete
-        self.logger.info(f"Waiting for {len(self.save_results)} tiles in '{subfolder}' to finish saving...")
-        
-        total_saves = len(self.save_results)
-        
-        if self.progress_callback:
-            # Use the callback to show save progress
-            for save_idx, result in enumerate(self.save_results):
-                success, message = result.get()  # Wait and get the return value
-                if not success:
-                    # Log errors from the worker processes
-                    self.logger.error(message)
-                
-                # Report save progress
-                progress = TileProgress(
-                    current_set_name=f"{subfolder.rstrip('/')}",
-                    current_image_name="",  # Not image-specific
-                    current_image_idx=save_idx + 1,
-                    total_images=total_saves,
-                    current_tile_idx=0,  # Use the image_idx/total_images fields
-                    total_tiles=0
-                )
-                self.progress_callback(progress)
-                
-        else:
-            # No callback, use the original tqdm loop for console progress
-            for result in tqdm(self.save_results, desc=f"Saving '{subfolder}' tiles"):
-                success, message = result.get()  # Wait and get the return value
-                if not success:
-                    # Log errors from the worker processes
-                    self.logger.error(message)
-            
+        self.logger.info(f"Waiting for {len(self._save_futures)} tiles in '{subfolder}' to finish saving...")
+
+        total_saves = len(self._save_futures)
+        if total_saves:
+            completed = 0
+            for f in as_completed(self._save_futures):
+                try:
+                    success, message = f.result()
+                    if not success:
+                        self.logger.error(message)
+                except Exception as e:
+                    self.logger.exception(f"Save worker raised: {e}")
+
+                completed += 1
+                if self.progress_callback:
+                    progress = TileProgress(
+                        current_set_name=f"{subfolder.rstrip('/')}",
+                        current_image_name="",
+                        current_image_idx=completed,
+                        total_images=total_saves,
+                        current_tile_idx=0,
+                        total_tiles=0
+                    )
+                    self.progress_callback(progress)
+
         self.logger.info(f"All tiles for '{subfolder}' saved.")
-        self.save_results.clear()  # Clear the list for the next subfolder
+        self._save_futures.clear()  # Clear the set for the next subfolder
         
     def _check_and_split_data(self) -> None:
         """Check if valid or test folders are empty and split data if necessary."""
@@ -1557,7 +1567,8 @@ class YoloTiler:
         num_samples = min(self.num_viz_samples, len(source_image_paths))
         selected_source_images = random.sample(source_image_paths, num_samples)
         
-        self.save_results.clear()
+        # clear any previously tracked futures
+        self._save_futures.clear()
         
         # Process each selected source image
         for image_idx, source_image_path in enumerate(selected_source_images):
@@ -1604,8 +1615,18 @@ class YoloTiler:
                 self.annotation_type,
                 self.render_dir
             )
-            result = self.save_pool.apply_async(_render_sample_worker, args=args)
-            self.save_results.append(result)
+            future = self.save_executor.submit(_render_sample_worker, *args)
+            self._save_futures.add(future)
+            if len(self._save_futures) >= self._max_outstanding:
+                done, not_done = wait(self._save_futures, return_when=FIRST_COMPLETED)
+                for f in done:
+                    try:
+                        success, message = f.result()
+                        if not success:
+                            self.logger.error(f"Failed to render sample: {message}")
+                    except Exception as e:
+                        self.logger.exception(f"Render worker raised: {e}")
+                self._save_futures = set(not_done)
             
             # Render each tile
             for tile_idx, tile_path in enumerate(tiles):
@@ -1635,38 +1656,45 @@ class YoloTiler:
                     self.annotation_type,
                     self.render_dir
                 )
-                result = self.save_pool.apply_async(_render_sample_worker, args=args)
-                self.save_results.append(result)
+                future = self.save_executor.submit(_render_sample_worker, *args)
+                self._save_futures.add(future)
+                if len(self._save_futures) >= self._max_outstanding:
+                    done, not_done = wait(self._save_futures, return_when=FIRST_COMPLETED)
+                    for f in done:
+                        try:
+                            success, message = f.result()
+                            if not success:
+                                self.logger.error(f"Failed to render sample: {message}")
+                        except Exception as e:
+                            self.logger.exception(f"Render worker raised: {e}")
+                    self._save_futures = set(not_done)
 
-        # --- MODIFICATION: Add the "wait and report" loop ---
-        self.logger.info(f"Waiting for {len(self.save_results)} visualization samples to render...")
-        total_renders = len(self.save_results)
-        
-        if self.progress_callback:
-            for render_idx, result in enumerate(self.save_results):
-                success, message = result.get()
-                if not success:
-                    self.logger.error(f"Failed to render sample: {message}")
-                
-                # Report render progress
-                progress = TileProgress(
-                    current_set_name="Rendering Visuals",
-                    current_image_name="",  # Not image-specific
-                    current_image_idx=render_idx + 1,
-                    total_images=total_renders,
-                    current_tile_idx=0,  # Use image_idx/total_images
-                    total_tiles=0
-                )
-                self.progress_callback(progress)
-        else:
-            # Fallback to tqdm for console
-            for result in tqdm(self.save_results, desc="Rendering Samples"):
-                success, message = result.get()
-                if not success:
-                    self.logger.error(f"Failed to render sample: {message}")
-                    
+        # Drain any remaining futures
+        self.logger.info(f"Waiting for {len(self._save_futures)} visualization samples to render...")
+        total_renders = len(self._save_futures)
+        if total_renders:
+            completed = 0
+            for f in as_completed(self._save_futures):
+                try:
+                    success, message = f.result()
+                    if not success:
+                        self.logger.error(f"Failed to render sample: {message}")
+                except Exception as e:
+                    self.logger.exception(f"Render worker raised: {e}")
+                completed += 1
+                if self.progress_callback:
+                    progress = TileProgress(
+                        current_set_name="Rendering Visuals",
+                        current_image_name="",
+                        current_image_idx=completed,
+                        total_images=total_renders,
+                        current_tile_idx=0,
+                        total_tiles=0
+                    )
+                    self.progress_callback(progress)
+
         self.logger.info("All visualization samples rendered.")
-        self.save_results.clear()
+        self._save_futures.clear()
     
     def run(self) -> None:
         """Run the complete tiling process"""
@@ -1707,9 +1735,11 @@ class YoloTiler:
                 pbar.close()
             self._progress_bars.clear()
             
-        # Properly shut down the multiprocessing pool
-        if hasattr(self, 'save_pool') and self.save_pool:
-            self.logger.info("Shutting down multiprocessing pool...")
-            self.save_pool.close() # No more new tasks
-            self.save_pool.join()  # Wait for all existing tasks to finish
-            self.logger.info("Pool shut down.")
+        # Properly shut down the save executor if it exists
+        if hasattr(self, 'save_executor'):
+            try:
+                self.logger.info("Shutting down save executor...")
+                self.save_executor.shutdown(wait=True)
+                self.logger.info("Executor shut down.")
+            except Exception:
+                pass
