@@ -501,6 +501,20 @@ class YoloTiler:
         else:
             return "labels"
 
+    def _get_source_label_folder(self, subfolder: str) -> Path:
+        """Find the source label folder - returns 'masks' if it exists, otherwise 'labels'.
+        For non-semantic segmentation, always returns 'labels'."""
+        if self.annotation_type == "semantic_segmentation":
+            masks_dir = self.source / subfolder / "masks"
+            labels_dir = self.source / subfolder / "labels"
+            # Prefer 'masks' if it exists, fall back to 'labels'
+            if masks_dir.exists():
+                return masks_dir
+            else:
+                return labels_dir
+        else:
+            return self.source / subfolder / "labels"
+
     def _setup_logger(self) -> logging.Logger:
         """Configure logging for the tiler"""
         logger = logging.getLogger('YoloTiler')
@@ -565,20 +579,32 @@ class YoloTiler:
             else:
                 # Check for images and labels folders
                 images_dir = subfolder_path / 'images'
-                labels_dir = subfolder_path / 'labels'
+                
+                # For semantic segmentation, accept either 'masks' or 'labels' folder
+                if self.annotation_type == "semantic_segmentation":
+                    masks_dir = subfolder_path / 'masks'
+                    labels_dir = subfolder_path / 'labels'
+                    # Check if at least one exists
+                    if not masks_dir.exists() and not labels_dir.exists():
+                        raise ValueError(f"Required folder {masks_dir} or {labels_dir} does not exist")
+                    # Use whichever exists (prefer masks if both exist)
+                    label_or_mask_dir = masks_dir if masks_dir.exists() else labels_dir
+                else:
+                    # For other types, require 'labels' folder
+                    label_or_mask_dir = subfolder_path / 'labels'
                 
                 if not images_dir.exists():
                     raise ValueError(f"Required folder {images_dir} does not exist")
-                if not labels_dir.exists():
-                    raise ValueError(f"Required folder {labels_dir} does not exist")
+                if not label_or_mask_dir.exists():
+                    raise ValueError(f"Required folder {label_or_mask_dir} does not exist")
                 
                 if subfolder.startswith('train'):
                     image_files = list(images_dir.glob('*'))
                     
                     if self.annotation_type == "semantic_segmentation":
-                        label_files = list(labels_dir.glob('*.png'))
+                        label_files = list(label_or_mask_dir.glob('*.png'))
                     else:
-                        label_files = list(labels_dir.glob('*.txt'))
+                        label_files = list(label_or_mask_dir.glob('*.txt'))
                     
                     if not image_files:
                         raise ValueError(
@@ -587,7 +613,7 @@ class YoloTiler:
                         )
                     if not label_files:
                         raise ValueError(
-                            f"No Data Found: The 'train' labels directory '{labels_dir}' is empty. "
+                            f"No Data Found: The 'train' labels directory '{label_or_mask_dir}' is empty. "
                             f"There is no data to tile."
                         )
 
@@ -595,7 +621,7 @@ class YoloTiler:
                 if not label_check_done and self.annotation_type in ["object_detection", "instance_segmentation"]:
                     
                     # Find the first .txt file in the labels directory
-                    first_label_file = next(labels_dir.glob('*.txt'), None)
+                    first_label_file = next(label_or_mask_dir.glob('*.txt'), None)
                     
                     if first_label_file:
                         label_check_done = True 
@@ -1321,10 +1347,13 @@ class YoloTiler:
             # Detection and segmentation tasks (get the images and labels in subfolders)
             image_paths = list((self.source / subfolder / 'images').glob('*'))
             
+            # Use helper to get source label folder (handles both 'labels' and 'masks' for semantic)
+            source_label_dir = self._get_source_label_folder(subfolder)
+            
             if self.annotation_type == "semantic_segmentation":
-                label_paths = list((self.source / subfolder / 'labels').glob('*.png'))
+                label_paths = list(source_label_dir.glob('*.png'))
             else:
-                label_paths = list((self.source / subfolder / 'labels').glob('*.txt'))
+                label_paths = list(source_label_dir.glob('*.txt'))
             
             # Sort paths to ensure consistent ordering
             image_paths.sort()
@@ -1477,7 +1506,7 @@ class YoloTiler:
             else:
                 # For detection and segmentation tasks
                 source_img_dir = self.source / subfolder / "images"
-                source_lbl_dir = self.source / subfolder / "labels"
+                source_lbl_dir = self._get_source_label_folder(subfolder)
                 
                 if source_img_dir.exists() and source_lbl_dir.exists():
                     label_folder = self._get_label_folder_name()

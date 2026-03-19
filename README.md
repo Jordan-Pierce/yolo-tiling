@@ -14,6 +14,9 @@ This module can cut images and corresponding labels from a YOLO dataset into til
 new dataset based on these tiles. It supports object detection, instance segmentation, semantic segmentation, and image classification.
 Credit for the original repository goes to [slanj](https://github.com/slanj/yolo-tiling).
 
+## Notes:
+- `03/19/2026`: Changes made for semantic segmentation task: expects as input mask annotations in subfolders called "masks" or "labels", but only outputs annotations in subfolders called "masks. Apologies for the inconvenience. 
+
 ## Installation
 
 To install the package, use pip:
@@ -145,7 +148,7 @@ def progress_callback(progress: TileProgress):
 - `copy_source_data` will make copy the original YOLO dataset to the output folder (for multiscale).
 - Pay attention to the differences between the `valid` and `val` folder for different tasks.
 
-#### Object Detection, Instance Segmentation, and Semantic Segmentation
+#### Object Detection, Instance Segmentation
 
 ```bash
 dataset/
@@ -176,7 +179,25 @@ dataset/
     └── class_2/
 ```
 
-**Note**: For semantic segmentation, the `labels/` folders contain PNG mask files (single channel, uint8) where pixel values represent class IDs (0 = background, 1-255 = classes). Tiled masks are also saved as PNG files regardless of the output format specified for images. For object detection and instance segmentation, the `labels/` folders contain `.txt` files with YOLO format annotations.
+#### Semantic Segmentation
+
+```bash
+dataset/
+├── train/
+│   ├── images/
+│   └── masks/
+├── valid/  # <--- "valid", not "val"
+│   ├── images/
+│   └── masks/
+├── test/
+│   ├── images/
+│   └── masks/
+└── data.yaml
+```
+
+For semantic segmentation, the `masks/` folders will contain PNG mask files (single channel, uint8) where pixel values represent class IDs (typical format is 0 = background, 1-254 = classes, and 255 = ignore). Tiled masks are also saved as PNG files regardless of the output format specified for images. 
+
+For object detection and instance segmentation, the `labels/` folders contain `.txt` files with YOLO format annotations.
 
 ### Test Data
 
