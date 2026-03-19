@@ -161,7 +161,7 @@ def save_tile_worker(
             input_ext = original_path.suffix
             pattern = re.escape(input_ext)
             new_name = re.sub(pattern, mask_suffix, original_path.name, flags=re.IGNORECASE)
-            label_path = folder_base_path / "labels" / new_name
+            label_path = folder_base_path / "masks" / new_name
             _save_mask_worker(labels, label_path)
 
         elif annotation_type != "image_classification":
@@ -494,6 +494,13 @@ class YoloTiler:
             self._progress_bars[progress.current_set_name].close()
             del self._progress_bars[progress.current_set_name]
 
+    def _get_label_folder_name(self) -> str:
+        """Return the appropriate label folder name based on annotation type."""
+        if self.annotation_type == "semantic_segmentation":
+            return "masks"
+        else:
+            return "labels"
+
     def _setup_logger(self) -> logging.Logger:
         """Configure logging for the tiler"""
         logger = logging.getLogger('YoloTiler')
@@ -517,9 +524,10 @@ class YoloTiler:
                     # tiled/subfolder/class_cat/
                     (target / subfolder / class_cat).mkdir(parents=True, exist_ok=True)
             else:
-                # tiled/subfolder/images and tiled/subfolder/labels
+                # tiled/subfolder/images and tiled/subfolder/masks (or labels)
+                label_folder = self._get_label_folder_name()
                 (target / subfolder / "images").mkdir(parents=True, exist_ok=True)
-                (target / subfolder / "labels").mkdir(parents=True, exist_ok=True)
+                (target / subfolder / label_folder).mkdir(parents=True, exist_ok=True)
 
     def _validate_yolo_structure(self, folder: Path) -> None:
         """
@@ -1283,8 +1291,9 @@ class YoloTiler:
             label_path: Path to label file
             folder: Subfolder name (valid or test)
         """
+        label_folder = self._get_label_folder_name()
         target_image = self.target / folder / "images" / image_path.name
-        target_label = self.target / folder / "labels" / label_path.name
+        target_label = self.target / folder / label_folder / label_path.name
 
         image_path.rename(target_image)
         label_path.rename(target_label)
@@ -1426,17 +1435,18 @@ class YoloTiler:
                 with open(data_yaml, 'r') as f:
                     data = yaml.safe_load(f)
                 
-                # Update paths
+                # Update paths using f-strings for consistency
+                target_str = str(self.target)
                 if 'train' in data:
-                    data['train'] = str(self.target / 'train' / 'images')
+                    data['train'] = f"{target_str}/train/images"
                 if 'val' in data:
-                    data['val'] = str(self.target / 'valid' / 'images')
+                    data['val'] = f"{target_str}/valid/images"
                 if 'valid' in data:
-                    data['valid'] = str(self.target / 'valid' / 'images')
+                    data['valid'] = f"{target_str}/valid/images"
                 if 'test' in data:
-                    data['test'] = str(self.target / 'test' / 'images')
+                    data['test'] = f"{target_str}/test/images"
                 if 'path' in data:
-                    data['path'] = str(self.target)
+                    data['path'] = target_str
                 
                 # Write updated YAML
                 with open(self.target / 'data.yaml', 'w') as f:
@@ -1470,8 +1480,9 @@ class YoloTiler:
                 source_lbl_dir = self.source / subfolder / "labels"
                 
                 if source_img_dir.exists() and source_lbl_dir.exists():
+                    label_folder = self._get_label_folder_name()
                     target_img_dir = self.target / f"{subfolder.rstrip('/')}" / "images"
-                    target_lbl_dir = self.target / f"{subfolder.rstrip('/')}" / "labels"
+                    target_lbl_dir = self.target / f"{subfolder.rstrip('/')}" / label_folder
                     
                     target_img_dir.mkdir(parents=True, exist_ok=True)
                     target_lbl_dir.mkdir(parents=True, exist_ok=True)
