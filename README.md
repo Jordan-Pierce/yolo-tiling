@@ -151,13 +151,13 @@ def progress_callback(progress: TileProgress):
 dataset/
 ├── train/
 │   ├── images/
-│   └── labels/
+│   └── labels/  (or "masks/" for semantic segmentation - either will work for input)
 ├── valid/  # <--- "valid", not "val"
 │   ├── images/
-│   └── labels/
+│   └── labels/  (or "masks/" for semantic segmentation - either will work for input)
 ├── test/
 │   ├── images/
-│   └── labels/
+│   └── labels/  (or "masks/" for semantic segmentation - either will work for input)
 └── data.yaml  # Optional
 ```
 
@@ -176,7 +176,7 @@ dataset/
     └── class_2/
 ```
 
-**Note**: For semantic segmentation, the `labels/` folders contain PNG mask files (single channel, uint8) where pixel values represent class IDs (0 = background, 1-255 = classes). Tiled masks are also saved as PNG files regardless of the output format specified for images. For object detection and instance segmentation, the `labels/` folders contain `.txt` files with YOLO format annotations.
+**Note**: For semantic segmentation, input mask files can be stored in folders named either `labels/` or `masks/` — the tiler will automatically detect which exists. However, **output masks are always saved to a `masks/` folder** for consistency. Mask files are PNG format (single channel, uint8) where pixel values represent class IDs. Tiled masks are saved as PNG files regardless of the output format specified for images. For object detection and instance segmentation, the `labels/` folders contain `.txt` files with YOLO format annotations.
 
 ### Test Data
 
