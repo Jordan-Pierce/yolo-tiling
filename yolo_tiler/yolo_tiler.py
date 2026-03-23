@@ -8,7 +8,8 @@ import warnings
 import contextlib
 from tqdm import tqdm
 
-from multiprocessing import Pool, cpu_count
+from concurrent.futures import ProcessPoolExecutor, wait, FIRST_COMPLETED, as_completed
+from multiprocessing import cpu_count
 
 from PIL import Image
 from dataclasses import dataclass
@@ -161,7 +162,6 @@ def save_tile_worker(
             input_ext = original_path.suffix
             pattern = re.escape(input_ext)
             new_name = re.sub(pattern, mask_suffix, original_path.name, flags=re.IGNORECASE)
-            # Always use "masks" folder for semantic segmentation output
             label_path = folder_base_path / "masks" / new_name
             _save_mask_worker(labels, label_path)
 
@@ -449,11 +449,14 @@ class YoloTiler:
             self.render_dir = self.target / 'rendered'
             self.render_dir.mkdir(parents=True, exist_ok=True)
             
-        # Create a multiprocessing pool to handle CPU-bound work (PNG compression)
-        num_workers = max(1, cpu_count() - 1) # Leave one core for the main thread
-        self.logger.info(f"Initializing multiprocessing.Pool with {num_workers} workers for saving tiles.")
-        self.save_pool = Pool(processes=num_workers)
-        self.save_results = []
+        # Create a ProcessPoolExecutor to handle CPU-bound work (PNG compression)
+        num_workers = max(1, cpu_count() - 1)  # Leave one core for the main thread
+        self.logger.info(f"Initializing ProcessPoolExecutor with {num_workers} workers for saving tiles.")
+        self.save_executor = ProcessPoolExecutor(max_workers=num_workers)
+        # Track outstanding futures to throttle memory/IO usage
+        self._save_futures = set()
+        # Maximum number of outstanding futures before blocking/waiting
+        self._max_outstanding = 100
             
     def _tqdm_callback(self, progress: TileProgress):
         """Internal callback function that uses tqdm for progress tracking
@@ -495,6 +498,27 @@ class YoloTiler:
         if is_complete:
             self._progress_bars[progress.current_set_name].close()
             del self._progress_bars[progress.current_set_name]
+
+    def _get_label_folder_name(self) -> str:
+        """Return the appropriate label folder name based on annotation type."""
+        if self.annotation_type == "semantic_segmentation":
+            return "masks"
+        else:
+            return "labels"
+
+    def _get_source_label_folder(self, subfolder: str) -> Path:
+        """Find the source label folder - returns 'masks' if it exists, otherwise 'labels'.
+        For non-semantic segmentation, always returns 'labels'."""
+        if self.annotation_type == "semantic_segmentation":
+            masks_dir = self.source / subfolder / "masks"
+            labels_dir = self.source / subfolder / "labels"
+            # Prefer 'masks' if it exists, fall back to 'labels'
+            if masks_dir.exists():
+                return masks_dir
+            else:
+                return labels_dir
+        else:
+            return self.source / subfolder / "labels"
 
     def _setup_logger(self) -> logging.Logger:
         """Configure logging for the tiler"""
@@ -541,11 +565,10 @@ class YoloTiler:
                     # tiled/subfolder/class_cat/
                     (target / subfolder / class_cat).mkdir(parents=True, exist_ok=True)
             else:
-                # tiled/subfolder/images and tiled/subfolder/labels or masks
+                # tiled/subfolder/images and tiled/subfolder/masks (or labels)
+                label_folder = self._get_label_folder_name()
                 (target / subfolder / "images").mkdir(parents=True, exist_ok=True)
-                # For semantic segmentation, always use "masks" for output
-                output_folder = "masks" if self.annotation_type == "semantic_segmentation" else "labels"
-                (target / subfolder / output_folder).mkdir(parents=True, exist_ok=True)
+                (target / subfolder / label_folder).mkdir(parents=True, exist_ok=True)
 
     def _validate_yolo_structure(self, folder: Path) -> None:
         """
@@ -587,22 +610,32 @@ class YoloTiler:
             else:
                 # Check for images and labels/masks folders
                 images_dir = subfolder_path / 'images'
-                # Use detected folder name for semantic segmentation, otherwise default to 'labels'
-                mask_folder_name = self.source_mask_folder_name if self.annotation_type == "semantic_segmentation" else 'labels'
-                labels_dir = subfolder_path / mask_folder_name
+                
+                # For semantic segmentation, accept either 'masks' or 'labels' folder
+                if self.annotation_type == "semantic_segmentation":
+                    masks_dir = subfolder_path / 'masks'
+                    labels_dir = subfolder_path / 'labels'
+                    # Check if at least one exists
+                    if not masks_dir.exists() and not labels_dir.exists():
+                        raise ValueError(f"Required folder {masks_dir} or {labels_dir} does not exist")
+                    # Use whichever exists (prefer masks if both exist)
+                    label_or_mask_dir = masks_dir if masks_dir.exists() else labels_dir
+                else:
+                    # For other types, require 'labels' folder
+                    label_or_mask_dir = subfolder_path / 'labels'
                 
                 if not images_dir.exists():
                     raise ValueError(f"Required folder {images_dir} does not exist")
-                if not labels_dir.exists():
-                    raise ValueError(f"Required folder {labels_dir} does not exist")
+                if not label_or_mask_dir.exists():
+                    raise ValueError(f"Required folder {label_or_mask_dir} does not exist")
                 
                 if subfolder.startswith('train'):
                     image_files = list(images_dir.glob('*'))
                     
                     if self.annotation_type == "semantic_segmentation":
-                        label_files = list(labels_dir.glob('*.png'))
+                        label_files = list(label_or_mask_dir.glob('*.png'))
                     else:
-                        label_files = list(labels_dir.glob('*.txt'))
+                        label_files = list(label_or_mask_dir.glob('*.txt'))
                     
                     if not image_files:
                         raise ValueError(
@@ -611,7 +644,7 @@ class YoloTiler:
                         )
                     if not label_files:
                         raise ValueError(
-                            f"No Data Found: The 'train' labels directory '{labels_dir}' is empty. "
+                            f"No Data Found: The 'train' labels directory '{label_or_mask_dir}' is empty. "
                             f"There is no data to tile."
                         )
 
@@ -619,7 +652,7 @@ class YoloTiler:
                 if not label_check_done and self.annotation_type in ["object_detection", "instance_segmentation"]:
                     
                     # Find the first .txt file in the labels directory
-                    first_label_file = next(labels_dir.glob('*.txt'), None)
+                    first_label_file = next(label_or_mask_dir.glob('*.txt'), None)
                     
                     if first_label_file:
                         label_check_done = True 
@@ -1115,9 +1148,21 @@ class YoloTiler:
                                 self.config.compression
                             )
                             
-                            # Dispatch to the top-level worker function
-                            result = self.save_pool.apply_async(save_tile_worker, args=args)
-                            self.save_results.append(result)
+                            # Dispatch to the top-level worker function via executor
+                            future = self.save_executor.submit(save_tile_worker, *args)
+                            self._save_futures.add(future)
+
+                            # Throttle outstanding futures: wait for at least one to complete
+                            if len(self._save_futures) >= self._max_outstanding:
+                                done, not_done = wait(self._save_futures, return_when=FIRST_COMPLETED)
+                                for f in done:
+                                    try:
+                                        success, message = f.result()
+                                        if not success:
+                                            self.logger.error(message)
+                                    except Exception as e:
+                                        self.logger.exception(f"Save worker raised: {e}")
+                                self._save_futures = set(not_done)
 
             # Handle potential mask read errors
             except Exception as e:
@@ -1317,9 +1362,7 @@ class YoloTiler:
             label_path: Path to label file
             folder: Subfolder name (valid or test)
         """
-        # Determine output folder based on annotation type
-        label_folder = "masks" if self.annotation_type == "semantic_segmentation" else "labels"
-        
+        label_folder = self._get_label_folder_name()
         target_image = self.target / folder / "images" / image_path.name
         target_label = self.target / folder / label_folder / label_path.name
 
@@ -1350,13 +1393,13 @@ class YoloTiler:
             # Detection and segmentation tasks (get the images and labels in subfolders)
             image_paths = list((self.source / subfolder / 'images').glob('*'))
             
-            # Use detected folder name for semantic segmentation input
-            mask_folder_name = self.source_mask_folder_name if self.annotation_type == "semantic_segmentation" else 'labels'
+            # Use helper to get source label folder (handles both 'labels' and 'masks' for semantic)
+            source_label_dir = self._get_source_label_folder(subfolder)
             
             if self.annotation_type == "semantic_segmentation":
-                label_paths = list((self.source / subfolder / mask_folder_name).glob('*.png'))
+                label_paths = list(source_label_dir.glob('*.png'))
             else:
-                label_paths = list((self.source / subfolder / 'labels').glob('*.txt'))
+                label_paths = list(source_label_dir.glob('*.txt'))
             
             # Sort paths to ensure consistent ordering
             image_paths.sort()
@@ -1396,39 +1439,33 @@ class YoloTiler:
             self.tile_image(image_path, label_path, subfolder, current_image_idx + 1, total_images)
                         
         # Wait for all save jobs for this subfolder to complete
-        self.logger.info(f"Waiting for {len(self.save_results)} tiles in '{subfolder}' to finish saving...")
-        
-        total_saves = len(self.save_results)
-        
-        if self.progress_callback:
-            # Use the callback to show save progress
-            for save_idx, result in enumerate(self.save_results):
-                success, message = result.get()  # Wait and get the return value
-                if not success:
-                    # Log errors from the worker processes
-                    self.logger.error(message)
-                
-                # Report save progress
-                progress = TileProgress(
-                    current_set_name=f"{subfolder.rstrip('/')}",
-                    current_image_name="",  # Not image-specific
-                    current_image_idx=save_idx + 1,
-                    total_images=total_saves,
-                    current_tile_idx=0,  # Use the image_idx/total_images fields
-                    total_tiles=0
-                )
-                self.progress_callback(progress)
-                
-        else:
-            # No callback, use the original tqdm loop for console progress
-            for result in tqdm(self.save_results, desc=f"Saving '{subfolder}' tiles"):
-                success, message = result.get()  # Wait and get the return value
-                if not success:
-                    # Log errors from the worker processes
-                    self.logger.error(message)
-            
+        self.logger.info(f"Waiting for {len(self._save_futures)} tiles in '{subfolder}' to finish saving...")
+
+        total_saves = len(self._save_futures)
+        if total_saves:
+            completed = 0
+            for f in as_completed(self._save_futures):
+                try:
+                    success, message = f.result()
+                    if not success:
+                        self.logger.error(message)
+                except Exception as e:
+                    self.logger.exception(f"Save worker raised: {e}")
+
+                completed += 1
+                if self.progress_callback:
+                    progress = TileProgress(
+                        current_set_name=f"{subfolder.rstrip('/')}",
+                        current_image_name="",
+                        current_image_idx=completed,
+                        total_images=total_saves,
+                        current_tile_idx=0,
+                        total_tiles=0
+                    )
+                    self.progress_callback(progress)
+
         self.logger.info(f"All tiles for '{subfolder}' saved.")
-        self.save_results.clear()  # Clear the list for the next subfolder
+        self._save_futures.clear()  # Clear the set for the next subfolder
         
     def _check_and_split_data(self) -> None:
         """Check if valid or test folders are empty and split data if necessary."""
@@ -1467,17 +1504,18 @@ class YoloTiler:
                 with open(data_yaml, 'r') as f:
                     data = yaml.safe_load(f)
                 
-                # Update paths
+                # Update paths using f-strings for consistency
+                target_str = str(self.target)
                 if 'train' in data:
-                    data['train'] = str(self.target / 'train' / 'images')
+                    data['train'] = f"{target_str}/train/images"
                 if 'val' in data:
-                    data['val'] = str(self.target / 'valid' / 'images')
+                    data['val'] = f"{target_str}/valid/images"
                 if 'valid' in data:
-                    data['valid'] = str(self.target / 'valid' / 'images')
+                    data['valid'] = f"{target_str}/valid/images"
                 if 'test' in data:
-                    data['test'] = str(self.target / 'test' / 'images')
+                    data['test'] = f"{target_str}/test/images"
                 if 'path' in data:
-                    data['path'] = str(self.target)
+                    data['path'] = target_str
                 
                 # Write updated YAML
                 with open(self.target / 'data.yaml', 'w') as f:
@@ -1508,19 +1546,12 @@ class YoloTiler:
             else:
                 # For detection and segmentation tasks
                 source_img_dir = self.source / subfolder / "images"
-                
-                # Determine source and target label folders
-                if self.annotation_type == "semantic_segmentation":
-                    source_lbl_dir = self.source / subfolder / self.source_mask_folder_name
-                    target_lbl_dir = self.target / f"{subfolder.rstrip('/')}" / "masks"  # Always output to "masks"
-                    label_pattern = "*.png"
-                else:
-                    source_lbl_dir = self.source / subfolder / "labels"
-                    target_lbl_dir = self.target / f"{subfolder.rstrip('/')}" / "labels"
-                    label_pattern = "*.txt"
+                source_lbl_dir = self._get_source_label_folder(subfolder)
                 
                 if source_img_dir.exists() and source_lbl_dir.exists():
+                    label_folder = self._get_label_folder_name()
                     target_img_dir = self.target / f"{subfolder.rstrip('/')}" / "images"
+                    target_lbl_dir = self.target / f"{subfolder.rstrip('/')}" / label_folder
                     
                     target_img_dir.mkdir(parents=True, exist_ok=True)
                     target_lbl_dir.mkdir(parents=True, exist_ok=True)
@@ -1561,7 +1592,8 @@ class YoloTiler:
         num_samples = min(self.num_viz_samples, len(source_image_paths))
         selected_source_images = random.sample(source_image_paths, num_samples)
         
-        self.save_results.clear()
+        # clear any previously tracked futures
+        self._save_futures.clear()
         
         # Process each selected source image
         for image_idx, source_image_path in enumerate(selected_source_images):
@@ -1608,8 +1640,18 @@ class YoloTiler:
                 self.annotation_type,
                 self.render_dir
             )
-            result = self.save_pool.apply_async(_render_sample_worker, args=args)
-            self.save_results.append(result)
+            future = self.save_executor.submit(_render_sample_worker, *args)
+            self._save_futures.add(future)
+            if len(self._save_futures) >= self._max_outstanding:
+                done, not_done = wait(self._save_futures, return_when=FIRST_COMPLETED)
+                for f in done:
+                    try:
+                        success, message = f.result()
+                        if not success:
+                            self.logger.error(f"Failed to render sample: {message}")
+                    except Exception as e:
+                        self.logger.exception(f"Render worker raised: {e}")
+                self._save_futures = set(not_done)
             
             # Render each tile
             for tile_idx, tile_path in enumerate(tiles):
@@ -1639,38 +1681,45 @@ class YoloTiler:
                     self.annotation_type,
                     self.render_dir
                 )
-                result = self.save_pool.apply_async(_render_sample_worker, args=args)
-                self.save_results.append(result)
+                future = self.save_executor.submit(_render_sample_worker, *args)
+                self._save_futures.add(future)
+                if len(self._save_futures) >= self._max_outstanding:
+                    done, not_done = wait(self._save_futures, return_when=FIRST_COMPLETED)
+                    for f in done:
+                        try:
+                            success, message = f.result()
+                            if not success:
+                                self.logger.error(f"Failed to render sample: {message}")
+                        except Exception as e:
+                            self.logger.exception(f"Render worker raised: {e}")
+                    self._save_futures = set(not_done)
 
-        # --- MODIFICATION: Add the "wait and report" loop ---
-        self.logger.info(f"Waiting for {len(self.save_results)} visualization samples to render...")
-        total_renders = len(self.save_results)
-        
-        if self.progress_callback:
-            for render_idx, result in enumerate(self.save_results):
-                success, message = result.get()
-                if not success:
-                    self.logger.error(f"Failed to render sample: {message}")
-                
-                # Report render progress
-                progress = TileProgress(
-                    current_set_name="Rendering Visuals",
-                    current_image_name="",  # Not image-specific
-                    current_image_idx=render_idx + 1,
-                    total_images=total_renders,
-                    current_tile_idx=0,  # Use image_idx/total_images
-                    total_tiles=0
-                )
-                self.progress_callback(progress)
-        else:
-            # Fallback to tqdm for console
-            for result in tqdm(self.save_results, desc="Rendering Samples"):
-                success, message = result.get()
-                if not success:
-                    self.logger.error(f"Failed to render sample: {message}")
-                    
+        # Drain any remaining futures
+        self.logger.info(f"Waiting for {len(self._save_futures)} visualization samples to render...")
+        total_renders = len(self._save_futures)
+        if total_renders:
+            completed = 0
+            for f in as_completed(self._save_futures):
+                try:
+                    success, message = f.result()
+                    if not success:
+                        self.logger.error(f"Failed to render sample: {message}")
+                except Exception as e:
+                    self.logger.exception(f"Render worker raised: {e}")
+                completed += 1
+                if self.progress_callback:
+                    progress = TileProgress(
+                        current_set_name="Rendering Visuals",
+                        current_image_name="",
+                        current_image_idx=completed,
+                        total_images=total_renders,
+                        current_tile_idx=0,
+                        total_tiles=0
+                    )
+                    self.progress_callback(progress)
+
         self.logger.info("All visualization samples rendered.")
-        self.save_results.clear()
+        self._save_futures.clear()
     
     def run(self) -> None:
         """Run the complete tiling process"""
@@ -1711,9 +1760,11 @@ class YoloTiler:
                 pbar.close()
             self._progress_bars.clear()
             
-        # Properly shut down the multiprocessing pool
-        if hasattr(self, 'save_pool') and self.save_pool:
-            self.logger.info("Shutting down multiprocessing pool...")
-            self.save_pool.close() # No more new tasks
-            self.save_pool.join()  # Wait for all existing tasks to finish
-            self.logger.info("Pool shut down.")
+        # Properly shut down the save executor if it exists
+        if hasattr(self, 'save_executor'):
+            try:
+                self.logger.info("Shutting down save executor...")
+                self.save_executor.shutdown(wait=True)
+                self.logger.info("Executor shut down.")
+            except Exception:
+                pass
