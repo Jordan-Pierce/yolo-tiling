@@ -10,12 +10,9 @@
 [![ubuntu](https://github.com/Jordan-Pierce/yolo-tiling/actions/workflows/ubuntu.yml/badge.svg)](https://pypi.org/project/yolo-tiling)
 </div>
 
-This module can cut images and corresponding labels from a YOLO dataset into tiles of specified size and create a
+This module can cut (or "tile") images and corresponding labels from a YOLO dataset into tiles of a specified size and create a
 new dataset based on these tiles. It supports object detection, instance segmentation, semantic segmentation, and image classification.
 Credit for the original repository goes to [slanj](https://github.com/slanj/yolo-tiling).
-
-## Notes:
-- `03/19/2026`: Changes made for semantic segmentation task: expects as input mask annotations in subfolders called "masks" or "labels", but only outputs annotations in subfolders called "masks. Apologies for the inconvenience. 
 
 ## Installation
 
@@ -146,9 +143,10 @@ def progress_callback(progress: TileProgress):
 - If there already exists train / valid / test folders in the source directory, the ratios are ignored.
 - Tiles are named as `basename_top-left_bottom-right_width_height.ext`.
 - `copy_source_data` will make copy the original YOLO dataset to the output folder (for multiscale).
+- Tiled semantic masks are saved as PNG files regardless of the output format specified for images. 
 - Pay attention to the differences between the `valid` and `val` folder for different tasks.
 
-#### Object Detection, Instance Segmentation
+#### Object Detection, Instance Segmentation, and Semantic Segmentation
 
 ```bash
 dataset/
@@ -161,7 +159,7 @@ dataset/
 ├── test/
 │   ├── images/
 │   └── labels/  (or "masks/" for semantic segmentation - either will work for input)
-└── data.yaml  # Optional
+└── data.yaml 
 ```
 
 #### Image Classification
@@ -179,25 +177,8 @@ dataset/
     └── class_2/
 ```
 
-#### Semantic Segmentation
+For object detection and instance segmentation, the `labels/` folders should contain `.txt` files with YOLO-formatted annotations. For semantic segmentation, the input `masks/` or `labels/` folders should contain PNG mask files (single channel, uint8) where pixel values represent class IDs (typical format is 0 = background, 1-254 = classes, and 255 = ignore). This format is meant to match expectations of `ultralytics`.
 
-```bash
-dataset/
-├── train/
-│   ├── images/
-│   └── masks/
-├── valid/  # <--- "valid", not "val"
-│   ├── images/
-│   └── masks/
-├── test/
-│   ├── images/
-│   └── masks/
-└── data.yaml
-```
-
-For semantic segmentation, the `masks/` folders will contain PNG mask files (single channel, uint8) where pixel values represent class IDs (typical format is 0 = background, 1-254 = classes, and 255 = ignore). Tiled masks are also saved as PNG files regardless of the output format specified for images. 
-
-For object detection and instance segmentation, the `labels/` folders contain `.txt` files with YOLO format annotations.
 
 ### Test Data
 
@@ -247,7 +228,7 @@ yolo-tiling --source tests/detection --target tests/detection_tiled --output_ext
 
 ### Memory Efficiency
 
-The `tile_image` method now uses rasterio's Window to read and process image tiles directly from the disk, instead of loading the entire image into memory. This makes the tiling process more memory efficient, especially for large images.
+The `tile_image` method uses rasterio's Window to read and process image tiles directly from the disk, instead of loading the entire image into memory. This makes the tiling process more memory efficient, especially for large images.
 
 ---
 ## Disclaimer
