@@ -437,6 +437,7 @@ class YoloTiler:
         
         # Get the annotation type
         self.annotation_type = self.config.annotation_type
+        self.source_mask_folder_name = 'labels'  # Will be detected in _validate_yolo_structure
         
         if self.annotation_type != "image_classification":
             self.subfolders = ['train/', 'valid/', 'test/']
@@ -525,6 +526,28 @@ class YoloTiler:
         logger.setLevel(logging.INFO)
         return logger
 
+    def _detect_mask_folder_name(self, folder: Path) -> str:
+        """
+        Detect whether 'labels' or 'masks' folder exists for semantic segmentation.
+        
+        Args:
+            folder: Path to the parent directory to search
+            
+        Returns:
+            str: Either 'labels' or 'masks' depending on which exists
+        """
+        if self.annotation_type != "semantic_segmentation":
+            return 'labels'  # Default for other annotation types
+        
+        # For semantic segmentation, check which folder exists
+        labels_path = folder / 'labels'
+        masks_path = folder / 'masks'
+        
+        if masks_path.exists():
+            return 'masks'
+        else:
+            return 'labels'  # Default fallback
+
     def _create_target_folder(self, target: Path) -> None:
         """Create target folder if it does not exist"""
         
@@ -558,6 +581,10 @@ class YoloTiler:
             ValueError: If required folders {train, val/id, test} are missing
                        or if annotation type mismatches label file content.
         """
+        # Detect the actual mask folder name for semantic segmentation
+        if self.annotation_type == "semantic_segmentation":
+            self.source_mask_folder_name = self._detect_mask_folder_name(folder / 'train')
+        
         label_check_done = False
         
         for subfolder in self.subfolders:
@@ -581,7 +608,7 @@ class YoloTiler:
                         f"exists, but it (or its class subfolders) contains no image files."
                     )
             else:
-                # Check for images and labels folders
+                # Check for images and labels/masks folders
                 images_dir = subfolder_path / 'images'
                 
                 # For semantic segmentation, accept either 'masks' or 'labels' folder
@@ -1182,11 +1209,13 @@ class YoloTiler:
         
         if self.annotation_type == "semantic_segmentation":
             label_pattern = "*.png"  # Or more generally: "*.png" or "*.jpg" etc.
+            label_folder = "masks"  # Always use "masks" for output
         else:
             label_pattern = "*.txt"
+            label_folder = "labels"
             
         train_images = list((self.target / 'train' / 'images').glob(pattern))
-        train_labels = list((self.target / 'train' / 'labels').glob(label_pattern))
+        train_labels = list((self.target / 'train' / label_folder).glob(label_pattern))
 
         if not train_images or not train_labels:
             self.logger.warning("No train data found to split")
@@ -1337,6 +1366,7 @@ class YoloTiler:
         target_image = self.target / folder / "images" / image_path.name
         target_label = self.target / folder / label_folder / label_path.name
 
+        target_label.parent.mkdir(parents=True, exist_ok=True)  # Ensure folder exists
         image_path.rename(target_image)
         label_path.rename(target_label)
 
@@ -1385,7 +1415,7 @@ class YoloTiler:
 
         # Check for missing files
         if not image_paths:
-            self.logger.warning(f"No images found in {subfolder} directory, skipping")
+            self.logger.warning(f"No images found in original {subfolder} directory, skipping")
             return
         if len(image_paths) != len(label_paths):
             self.logger.error(f"Number of images and labels do not match in {subfolder} directory, skipping")
@@ -1531,11 +1561,6 @@ class YoloTiler:
                         shutil.copy2(img_path, target_img_dir / img_path.name)
                     
                     # Copy all labels (TXT for detection/segmentation, PNG for semantic)
-                    if self.annotation_type == "semantic_segmentation":
-                        label_pattern = "*.png"
-                    else:
-                        label_pattern = "*.txt"
-                    
                     for lbl_path in source_lbl_dir.glob(label_pattern):
                         shutil.copy2(lbl_path, target_lbl_dir / lbl_path.name)
         
@@ -1600,7 +1625,7 @@ class YoloTiler:
                 label_path = source_image_path.parent.name  # Class name
             else:
                 if self.annotation_type == "semantic_segmentation":
-                    source_label_path = source_image_path.parent.parent / 'labels' / f"{source_image_path.stem}.png"
+                    source_label_path = source_image_path.parent.parent / self.source_mask_folder_name / f"{source_image_path.stem}.png"
                 else:
                     source_label_path = source_image_path.parent.parent / 'labels' / f"{source_image_path.stem}.txt"
                 if not source_label_path.exists():
@@ -1634,7 +1659,7 @@ class YoloTiler:
                     label_path = tile_path.parent.name  # Class name
                 else:
                     if self.annotation_type == "semantic_segmentation":
-                        tile_label_path = self.target / 'train' / 'labels' / f"{tile_path.stem}.png"
+                        tile_label_path = self.target / 'train' / 'masks' / f"{tile_path.stem}.png"
                     else:
                         tile_label_path = self.target / 'train' / 'labels' / f"{tile_path.stem}.txt"
                     if not tile_label_path.exists():

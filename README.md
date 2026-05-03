@@ -154,13 +154,13 @@ def progress_callback(progress: TileProgress):
 dataset/
 ├── train/
 │   ├── images/
-│   └── labels/
+│   └── labels/  (or "masks/" for semantic segmentation - either will work for input)
 ├── valid/  # <--- "valid", not "val"
 │   ├── images/
-│   └── labels/
+│   └── labels/  (or "masks/" for semantic segmentation - either will work for input)
 ├── test/
 │   ├── images/
-│   └── labels/
+│   └── labels/  (or "masks/" for semantic segmentation - either will work for input)
 └── data.yaml  # Optional
 ```
 
