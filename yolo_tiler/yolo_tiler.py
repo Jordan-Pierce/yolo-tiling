@@ -55,6 +55,30 @@ def _save_labels_worker(labels: List, path: Path, is_segmentation: bool) -> None
         df.to_csv(path, sep=' ', index=False, header=False, float_format='%.6f')
 
 
+def _drop_alpha_bands(tile_data: np.ndarray, color_interpretations) -> np.ndarray:
+    """Remove alpha bands from a raster tile when present."""
+    if tile_data.ndim != 3:
+        return tile_data
+
+    alpha_band_indices = [
+        idx for idx, color_interp in enumerate(color_interpretations)
+        if getattr(color_interp, 'name', '').lower() == 'alpha'
+    ]
+
+    if not alpha_band_indices:
+        return tile_data
+
+    keep_band_indices = [
+        idx for idx in range(tile_data.shape[0])
+        if idx not in alpha_band_indices
+    ]
+
+    if len(keep_band_indices) == tile_data.shape[0]:
+        return tile_data
+
+    return tile_data[keep_band_indices, :, :]
+
+
 def _save_tile_image_worker(tile_data: np.ndarray, 
                             image_path_out: Path, 
                             compression_quality: int) -> None:
@@ -1080,6 +1104,7 @@ class YoloTiler:
 
                         # Read image data *after* the potential skip
                         tile_data = src.read(window=window)
+                        tile_data = _drop_alpha_bands(tile_data, src.colorinterp)
 
                         # Create polygon for current tile
                         tile_polygon = Polygon([
@@ -1547,6 +1572,7 @@ class YoloTiler:
                 # For detection and segmentation tasks
                 source_img_dir = self.source / subfolder / "images"
                 source_lbl_dir = self._get_source_label_folder(subfolder)
+                label_pattern = "*.png" if self.annotation_type == "semantic_segmentation" else "*.txt"
                 
                 if source_img_dir.exists() and source_lbl_dir.exists():
                     label_folder = self._get_label_folder_name()
