@@ -1516,6 +1516,8 @@ class YoloTiler:
                     data['test'] = f"{target_str}/test/images"
                 if 'path' in data:
                     data['path'] = target_str
+                if self.annotation_type == "semantic_segmentation":
+                    data['masks_dir'] = 'masks'
                 
                 # Write updated YAML
                 with open(self.target / 'data.yaml', 'w') as f:
