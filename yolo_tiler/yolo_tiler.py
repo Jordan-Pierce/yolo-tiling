@@ -1529,18 +1529,17 @@ class YoloTiler:
                 with open(data_yaml, 'r') as f:
                     data = yaml.safe_load(f)
                 
-                # Update paths using f-strings for consistency
-                target_str = str(self.target)
+                # Use relative paths so dataset stays portable if moved/transferred
                 if 'train' in data:
-                    data['train'] = f"{target_str}/train/images"
+                    data['train'] = 'train/images'
                 if 'val' in data:
-                    data['val'] = f"{target_str}/valid/images"
+                    data['val'] = 'valid/images'
                 if 'valid' in data:
-                    data['valid'] = f"{target_str}/valid/images"
+                    data['valid'] = 'valid/images'
                 if 'test' in data:
-                    data['test'] = f"{target_str}/test/images"
+                    data['test'] = 'test/images'
                 if 'path' in data:
-                    data['path'] = target_str
+                    data['path'] = '.'
                 if self.annotation_type == "semantic_segmentation":
                     data['masks_dir'] = 'masks'
                 
