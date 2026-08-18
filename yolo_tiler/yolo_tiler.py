@@ -26,6 +26,7 @@ import matplotlib.pyplot as plt
 
 import matplotlib.patches as patches
 from matplotlib.patches import Polygon as MplPolygon
+from rasterio.enums import Resampling
 from rasterio.windows import Window
 from shapely.geometry import Polygon, MultiPolygon
 
@@ -203,6 +204,86 @@ def save_tile_worker(
         return (False, f"Error saving tile for {original_path.name}: {e}")
     
 
+# Longest edge (pixels) a visualization sample is decimated to before rendering.
+RENDER_MAX_DIM = 2048
+
+
+def _to_uint8(arr: np.ndarray) -> np.ndarray:
+    """Normalize an arbitrary-dtype array to uint8 for display."""
+    if arr.dtype == np.uint8:
+        return arr
+
+    arr = arr.astype(np.float32)
+    finite = np.isfinite(arr)
+    if not finite.any():
+        return np.zeros(arr.shape, dtype=np.uint8)
+
+    lo = float(arr[finite].min())
+    hi = float(arr[finite].max())
+    if hi <= lo:
+        return np.zeros(arr.shape, dtype=np.uint8)
+
+    arr = np.clip((arr - lo) / (hi - lo), 0, 1)
+    return (arr * 255).astype(np.uint8)
+
+
+def _read_render_image(image_path: Path, max_dim: int = RENDER_MAX_DIM) -> Optional[np.ndarray]:
+    """
+    Read an image as RGB uint8 for visualization, decimating on read.
+
+    Source images can be multi-GB orthomosaics; a full-resolution decode would
+    exhaust memory (and OpenCV's imdecode buffers overflow past 2 GB), so a
+    windowed/decimated rasterio read is used instead. Renders are saved as small
+    figures, so the reduced resolution is not visible.
+    """
+    try:
+        with rasterio.open(image_path) as src:
+            scale = max(1, math.ceil(max(src.width, src.height) / max_dim))
+            out_h = max(1, src.height // scale)
+            out_w = max(1, src.width // scale)
+            bands = min(src.count, 3)
+            arr = src.read(
+                indexes=list(range(1, bands + 1)),
+                out_shape=(bands, out_h, out_w),
+                resampling=Resampling.bilinear,
+            )
+
+        arr = np.transpose(arr, (1, 2, 0))
+        if arr.shape[2] == 2:
+            arr = arr[:, :, :1]
+        if arr.shape[2] == 1:
+            arr = np.repeat(arr, 3, axis=2)
+
+        return _to_uint8(arr)
+
+    except Exception:
+        # Fallback for anything rasterio/GDAL cannot open
+        img = cv2.imread(str(image_path))
+        if img is None:
+            return None
+        return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+
+def _read_render_mask(label_path: Path, out_hw: Tuple[int, int]) -> Optional[np.ndarray]:
+    """
+    Read a semantic mask resampled to out_hw, preserving class ids (nearest).
+
+    The mask matches the source image resolution, so it is decimated to whatever
+    size _read_render_image produced to keep the overlay aligned.
+    """
+    out_h, out_w = out_hw
+    try:
+        with rasterio.open(label_path) as src:
+            return src.read(1, out_shape=(out_h, out_w), resampling=Resampling.nearest)
+
+    except Exception:
+        mask = cv2.imread(str(label_path), cv2.IMREAD_GRAYSCALE)
+        if mask is None:
+            return None
+        mask = mask.squeeze()
+        return cv2.resize(mask, (out_w, out_h), interpolation=cv2.INTER_NEAREST)
+
+
 def _render_sample_worker(
     image_path: Path, 
     label_path: Union[Path, str],  # Path to labels.txt, or class name
@@ -214,13 +295,11 @@ def _render_sample_worker(
     Worker: Renders a single visualization sample.
     """
     try:
-        # Read image using OpenCV
-        img = cv2.imread(str(image_path))
+        # Read image (decimated if it is a large raster)
+        img = _read_render_image(image_path)
         if img is None:
             return (False, f"Could not read image: {image_path}")
 
-        # Convert BGR to RGB
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         height, width = img.shape[:2]
 
         # Create figure and axis
@@ -245,8 +324,8 @@ def _render_sample_worker(
                     backgroundcolor='black',
                     ha='center')
         elif annotation_type == "semantic_segmentation":
-            # Read and overlay the mask
-            mask = cv2.imread(str(label_path), cv2.IMREAD_GRAYSCALE)
+            # Read and overlay the mask, matched to the (possibly decimated) image size
+            mask = _read_render_mask(label_path, (height, width))
             if mask is not None:
                 mask = mask.squeeze()
                 colored_mask = np.zeros_like(img)
